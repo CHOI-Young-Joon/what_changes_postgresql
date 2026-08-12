@@ -14,7 +14,7 @@
 |---|---|---|---|---|---|
 | P00 | 문서 및 Git 기준선 | 완료 | 계획서·작업기록·제외규칙 작성 및 GitHub `main` 동기화, 기준 커밋 `38215ae` | 없음 | 변경마다 기록과 동기화 유지 |
 | P01 | VM 안정화 | 완료 | NTP·서울 시간대·OS 업데이트·재부팅·SSH 검증 완료, UFW 수신 기본 차단 및 OpenSSH만 허용, `/opt/what_changes_postgresql` 확정 | SSH 비밀번호 인증은 활성 상태이나 현재 P01 완료 조건 범위 밖 | P02 진행, SSH 추가 강화는 별도 작업으로 관리 |
-| P02 | 컨테이너 실행 기반 | 대기 | Docker 미설치 확인 | sudo 필요 | Docker 공식 저장소와 설치 방식 확인 후 설치 |
+| P02 | 컨테이너 실행 기반 | 완료 | Docker Engine·Compose 설치, 전역 로그 제한·live-restore 적용, 내부 네트워크·볼륨·healthcheck·자원 제한·재부팅 자동 복구 실증 | 운영 서비스가 아직 없어 실제 운영 네트워크·볼륨은 P04에서 생성됨 | P03 정식 Ollama 준비 후 계획된 벤치마크 진행 |
 | P03 | 로컬 Ollama 벤치마크 | 진행 | `ornith:9b` 전송과 해시 검증 완료, Ollama 인식 확인, 짧은 항목 1차 시험 완료 | 속도·메모리는 기준 충족, 원문에 없는 고객 영향 추론으로 사실성 기준 미충족 | 강화 프롬프트 재시험 후 중간·긴 항목 시험 |
 | P04 | 애플리케이션 골격 | 대기 | 미착수 | 없음 | P02 이후 진행 |
 | P05 | 공식 문서 수집기 | 대기 | 미착수 | 없음 | P04 이후 진행 |
@@ -230,6 +230,84 @@ Owner/Mode: rock:rock / 0750
 - Chrony 동기화, 업데이트 후 공개키 SSH 재접속, 승인된 외부 포트만 존재한다는 P01 완료 조건을 모두 충족함.
 - P01 상태를 `완료`로 변경함.
 - SSH 비밀번호 인증 비활성화는 서비스 접근 정책 확인 후 별도 보안 강화 작업으로 관리함.
+
+### 2026-08-12 / P02 / Docker Engine과 Compose 설치
+
+사전 고지:
+
+- Ubuntu 26.04 공식 지원, 기존 충돌 패키지, 저장소 코드명과 서명 키를 먼저 확인한다고 알림.
+- Docker 설치 스크립트 대신 공식 APT 저장소 방식을 사용한다고 알림.
+- 설치 전 APT 시뮬레이션으로 추가·제거 패키지를 확인한다고 알림.
+
+공식 저장소 검증:
+
+- Docker 공식 문서에서 Ubuntu Resolute 26.04 LTS와 amd64 지원 확인.
+- `https://download.docker.com/linux/ubuntu/dists/resolute/Release` HTTP 200 확인.
+- Docker 기본 GPG 키 지문 `9DC858229FC7DD38854AE2D88D81803C0EBFCD88` 확인.
+- 기존 Docker, containerd, runc 패키지가 없어 충돌 제거 작업은 수행하지 않음.
+- Deb822 저장소를 `resolute`, `stable`, `amd64`로 제한해 등록.
+
+설치 결과:
+
+```text
+Docker Engine/CLI: 29.7.2
+containerd:         2.3.3
+Docker Buildx:      0.36.1
+Docker Compose:     5.4.0
+신규 패키지:       7개
+제거 패키지:       0개
+추가 디스크:       약 395MB
+docker/containerd: active, enabled
+미설정 패키지:     0개
+```
+
+운영 설정:
+
+- `/etc/docker/daemon.json`에 기본 로그 드라이버 `json-file` 적용.
+- 컨테이너 로그를 파일당 `10MB`, 최대 `3개`로 제한.
+- Docker 데몬 재시작 중 컨테이너를 유지하는 `live-restore` 활성화.
+- `rock`을 `docker` 그룹에 추가하고 새 SSH 세션에서 sudo 없는 Docker API 접근 확인.
+- Docker 그룹이 사실상 root 수준 권한임을 사용자에게 사전 고지함.
+- 설정 원본을 `ops/docker/daemon.json`에 보관.
+
+실행 검증:
+
+- 공식 `hello-world` 컨테이너가 정상 종료 코드로 실행됨.
+- 컨테이너 inspect에서 로그 설정 `max-size=10m`, `max-file=3` 상속 확인.
+- Docker 데몬 재시작 전후 컨테이너 ID와 시작 시각이 같아 `live-restore` 작동 확인.
+
+Compose 기반 검증:
+
+- `ops/compose/runtime-check.compose.yaml` 검증 스택 작성.
+- 내부 전용 네트워크, 명명 볼륨, healthcheck, `unless-stopped` 적용.
+- CPU `0.25`, 메모리 `64MB`, PID `64`, 읽기 전용 루트, capability 전체 제거, `no-new-privileges` 적용 확인.
+- 외부 공개 포트가 없는 상태에서 `healthy` 확인.
+- 운영용 `compose.yaml`에 `edge`, 내부 `backend`, `postgres_data`, `source_snapshots`, `generated_reports` 이름을 정의.
+- 운영 서비스가 아직 없으므로 Compose CLI가 미사용 네트워크와 볼륨을 런타임 구성에서 생략함. P04에서 서비스 연결 시 실제 생성 및 재검증함.
+
+VM 재부팅 검증:
+
+```text
+이전 boot ID: c51cfa62-b544-4de4-ace6-ebd33b49751c
+새 boot ID:   171bfb45-baa6-4c11-be94-d9f3b870a69e
+Docker:       active, enabled
+containerd:   active, enabled
+UFW/SSH:      active
+컨테이너:     running, healthy
+재시작 정책:  unless-stopped
+외부 포트:    없음
+내부 network: true
+first-started: 2026-08-12T09:00:30Z (보존)
+last-started:  2026-08-12T09:01:50Z (갱신)
+```
+
+정리와 판정:
+
+- 검증 후 테스트 컨테이너, 전용 네트워크와 전용 볼륨만 제거함.
+- 검증용 Compose 파일과 이미지는 재시험을 위해 유지함.
+- P02 작업용 임시 sudo 규칙 삭제 완료.
+- P02 컨테이너 실행 기반 완료 조건을 충족함.
+- 실제 운영 서비스의 자동 복구와 데이터 유지는 P04 구성 후, P10 출시 전 검증에서 다시 확인함.
 
 ### 2026-08-12 / P03 / Ollama 시험 준비
 

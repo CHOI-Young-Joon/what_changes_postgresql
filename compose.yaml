@@ -1,0 +1,19 @@
+name: what_changes_postgresql
+
+# P04에서 실제 서비스와 연결 관계를 추가한다.
+services: {}
+
+networks:
+  edge:
+    name: what_changes_postgresql_edge
+  backend:
+    name: what_changes_postgresql_backend
+    internal: true
+
+volumes:
+  postgres_data:
+    name: what_changes_postgresql_postgres_data
+  source_snapshots:
+    name: what_changes_postgresql_source_snapshots
+  generated_reports:
+    name: what_changes_postgresql_generated_reports

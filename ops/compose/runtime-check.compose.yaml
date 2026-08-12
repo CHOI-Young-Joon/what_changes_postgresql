@@ -1,0 +1,51 @@
+name: what_changes_postgresql_runtime_check
+
+services:
+  runtime-check:
+    image: alpine:3.22
+    command:
+      - /bin/sh
+      - -c
+      - |
+        if [ ! -s /state/first-started-at ]; then
+          date -u +%Y-%m-%dT%H:%M:%SZ > /state/first-started-at
+        fi
+        date -u +%Y-%m-%dT%H:%M:%SZ > /state/last-started-at
+        touch /tmp/healthy
+        exec tail -f /dev/null
+    restart: unless-stopped
+    init: true
+    read_only: true
+    tmpfs:
+      - /tmp:size=16m,mode=1777
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+    cpus: 0.25
+    mem_limit: 64m
+    pids_limit: 64
+    healthcheck:
+      test: ["CMD-SHELL", "test -f /tmp/healthy"]
+      interval: 10s
+      timeout: 3s
+      retries: 3
+      start_period: 5s
+    networks:
+      - backend
+    volumes:
+      - runtime_check_data:/state
+    logging:
+      driver: json-file
+      options:
+        max-size: 10m
+        max-file: "3"
+
+networks:
+  backend:
+    name: what_changes_postgresql_backend
+    internal: true
+
+volumes:
+  runtime_check_data:
+    name: what_changes_postgresql_runtime_check_data
