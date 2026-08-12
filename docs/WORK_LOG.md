@@ -13,7 +13,7 @@
 | 계획 ID | 계획 항목 | 상태 | 실제 결과 | 차이/문제 | 다음 작업 |
 |---|---|---|---|---|---|
 | P00 | 문서 및 Git 기준선 | 완료 | 계획서·작업기록·제외규칙 작성 및 GitHub `main` 동기화, 기준 커밋 `38215ae` | 없음 | 변경마다 기록과 동기화 유지 |
-| P01 | VM 안정화 | 진행 | VM 자원, 네트워크, 업데이트, 시간 상태 점검 | Chrony 실행 중이나 동기화 실패 | NTP 경로 결정 및 수정 |
+| P01 | VM 안정화 | 진행 | VM 자원·네트워크 점검, 외부 NTP 정상화, `Asia/Seoul` 시간대 적용 | OS 업데이트와 재부팅 검증 남음 | 보안 업데이트 범위 확인 후 적용 |
 | P02 | 컨테이너 실행 기반 | 대기 | Docker 미설치 확인 | sudo 필요 | P01 완료 후 설치 |
 | P03 | 로컬 Ollama 벤치마크 | 진행 | `ornith:9b` 전송과 해시 검증 완료, Ollama 인식 확인, 짧은 항목 1차 시험 완료 | 속도·메모리는 기준 충족, 원문에 없는 고객 영향 추론으로 사실성 기준 미충족 | 강화 프롬프트 재시험 후 중간·긴 항목 시험 |
 | P04 | 애플리케이션 골격 | 대기 | 미착수 | 없음 | P02 이후 진행 |
@@ -95,6 +95,43 @@ sudo: password required
 - 외부 AI API 기반 MVP 운영 자원은 충분.
 - NTP 해결과 업데이트가 설치보다 먼저 필요.
 - CPU-only 로컬 LLM은 별도 벤치마크 후 결정.
+
+### 2026-08-12 / P01 / 외부 NTP 및 서울 시간대 설정
+
+사전 고지:
+
+- 외부 NTP 연결 상태, Chrony 구성과 VirtualBox 시간 서비스 충돌 여부를 먼저 확인한다고 알림.
+- `rock` 계정은 sudo 비밀번호 입력이 필요하므로 사용자가 시간대 변경 명령 한 건만 직접 실행하고, 이후 상태는 원격으로 검증한다고 알림.
+
+점검 결과:
+
+- Chrony가 Canonical Ubuntu 외부 NTP 서버와 동기화 중.
+- VirtualBox Guest Additions 시간 동기화 서비스는 설치 또는 실행되어 있지 않음.
+- 초기 부팅 중 동기화 실패 기록은 있었지만 점검 시점에는 `System clock synchronized: yes`와 `Leap status: Normal` 상태.
+
+수행:
+
+- 시스템 시간대를 `Etc/UTC`에서 `Asia/Seoul`로 변경.
+- 외부 NTP source 설정은 정상 동작 중이어서 불필요하게 변경하지 않음.
+
+검증 결과:
+
+```text
+Local time: 2026-08-12 17:31:12 KST
+Universal time: 2026-08-12 08:31:12 UTC
+Time zone: Asia/Seoul (KST, +0900)
+System clock synchronized: yes
+NTP service: active
+Chrony leap status: Normal
+System time offset: 약 1ms
+/etc/localtime: /usr/share/zoneinfo/Asia/Seoul
+RTC in local TZ: no (UTC 유지, 정상)
+```
+
+판정:
+
+- 외부 시간 동기화와 서울 시간대 적용 완료.
+- P01 전체 완료를 위해 OS 업데이트, 재부팅, SSH 재접속과 시간 재검증이 남음.
 
 ### 2026-08-12 / P03 / Ollama 시험 준비
 
