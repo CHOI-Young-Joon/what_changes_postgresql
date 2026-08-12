@@ -15,7 +15,7 @@
 | P00 | 문서 및 Git 기준선 | 완료 | 계획서·작업기록·제외규칙 작성 및 GitHub `main` 동기화, 기준 커밋 `38215ae` | 없음 | 변경마다 기록과 동기화 유지 |
 | P01 | VM 안정화 | 완료 | NTP·서울 시간대·OS 업데이트·재부팅·SSH 검증 완료, UFW 수신 기본 차단 및 OpenSSH만 허용, `/opt/what_changes_postgresql` 확정 | SSH 비밀번호 인증은 활성 상태이나 현재 P01 완료 조건 범위 밖 | P02 진행, SSH 추가 강화는 별도 작업으로 관리 |
 | P02 | 컨테이너 실행 기반 | 완료 | Docker Engine·Compose 설치, 전역 로그 제한·live-restore 적용, 내부 네트워크·볼륨·healthcheck·자원 제한·재부팅 자동 복구 실증 | 운영 서비스가 아직 없어 실제 운영 네트워크·볼륨은 P04에서 생성됨 | P03 정식 Ollama 준비 후 계획된 벤치마크 진행 |
-| P03 | 로컬 Ollama 벤치마크 | 진행 | `ornith:9b` 전송과 해시 검증 완료, Ollama 인식 확인, 짧은 항목 1차 시험 완료 | 속도·메모리는 기준 충족, 원문에 없는 고객 영향 추론으로 사실성 기준 미충족 | 강화 프롬프트 재시험 후 중간·긴 항목 시험 |
+| P03 | 로컬 Ollama 벤치마크 | 진행 | 공식 `0.32.9` Docker 서비스와 내부 API 구성, `ornith:9b` 운영 경로 이전·인식 완료, 짧은 항목 1차 시험 완료 | 1차 시험은 속도·메모리·JSON 통과, 사실성 실패 | 강화 프롬프트 재시험 후 중간·긴 항목과 20건 연속 시험 |
 | P04 | 애플리케이션 골격 | 대기 | 미착수 | 없음 | P02 이후 진행 |
 | P05 | 공식 문서 수집기 | 대기 | 미착수 | 없음 | P04 이후 진행 |
 | P06 | 버전 비교 엔진 | 대기 | 미착수 | 없음 | P05 이후 진행 |
@@ -383,6 +383,70 @@ JSON parse: 성공
 - JSON 유효성 통과.
 - 사실성 기준 실패.
 - 모델 채택 판정은 보류하고 더 엄격한 프롬프트와 후처리 규칙으로 재시험.
+
+### 2026-08-12 / P03 / 정식 Ollama Docker 서비스 준비
+
+사전 고지:
+
+- 기존 임시 서비스와 모델 상태, 공식 Docker 배포 지원을 먼저 확인한다고 알림.
+- 프롬프트 시험 전에 정식 실행 기반부터 구성하며, 이 단계에서는 모델을 메모리에 로딩하지 않는다고 알림.
+- 기존 native 설치는 Docker 방식 검증 전까지 롤백용으로 보존한다고 알림.
+
+방식 결정:
+
+- 재부팅 후 임시 `ollama-benchmark.service`는 존재하지 않았고 실행 프로세스도 없었음.
+- 기존 모델 5.3GB와 `ornith:9b` manifest는 정상 보존됨.
+- 공식 Ollama 문서에서 CPU-only Docker 방식을 확인.
+- OmniRoute와 동일한 내부 Docker 네트워크에서 호스트 포트 없이 연결할 수 있어 정식 실행 방식은 Docker로 결정.
+- `ollama/ollama:0.32.9`의 Linux amd64 manifest 존재 확인.
+
+모델 경로 정리:
+
+- 모델 디렉터리를 `/home/rock/.ollama-benchmark/models`에서 `/opt/what_changes_postgresql/data/ollama/models`로 이동.
+- 같은 파일시스템의 디렉터리 이동이며 대표 blob inode `2051:393303`이 전후 동일해 데이터 재복사가 없음을 확인.
+- 이동 후 용량 5.3GB와 `ornith/9b` manifest 확인.
+- 실제 모델 데이터와 서버 `.env`는 Git 추적 대상에서 제외.
+
+Docker 구성:
+
+- 이미지 `ollama/ollama:0.32.9` 사용.
+- image ID와 RepoDigest `sha256:1685741456770df6e3cceb2a945a5f75e020f658d1701509668d6f4688f1dd3f` 확인.
+- Compose 이미지 참조를 위 RepoDigest로 고정하고 재생성 후 실제 container image ID 일치 확인.
+- 다운로드 레이어 약 2.52GB, 로컬 표시 이미지 크기 약 6.28GB.
+- 호스트 포트를 publish하지 않고 내부 `what_changes_postgresql_backend` 네트워크에서만 `11434/tcp` expose.
+- CPU 3개, 메모리 10GB, PID 512, 동시 모델 1개, 병렬 요청 1개로 제한.
+- `unless-stopped`, 2분 종료 유예, healthcheck, 로그 `10MB x 3개` 적용.
+- capability 전체 제거와 `no-new-privileges` 적용.
+- `OLLAMA_NO_CLOUD=true`로 Ollama Cloud 조회와 Cloud 키 생성을 비활성화.
+
+무추론 검증:
+
+```text
+Ollama version: 0.32.9
+Container: running, healthy
+Model: ornith:9b
+Model digest: a75697c145891910e312c95e4a9fc1ccb8653e5ef543b23b0403a4665b82fd91
+Model format: GGUF
+Parameters: 9.0B
+Quantization: Q4_K_M
+Cloud: disabled
+Host published ports: 없음
+Internal endpoint: http://ollama:11434
+Internal /api/tags: 성공
+Loaded models: 0
+Container restart: healthy 복귀, 같은 container ID 유지
+Error/Panic/Fatal logs: 없음
+Idle available memory: 약 14GiB
+Swap used: 0B
+Disk available: 70GB
+```
+
+판정과 남은 일:
+
+- 정식 Ollama 실행 기반과 OmniRoute용 내부 접근 경로 준비 완료.
+- 기존 native 설치 약 2.1GB는 강화 벤치마크 완료 전까지 롤백용으로 유지.
+- 이 단계에서는 프롬프트나 모델 메모리 로딩을 수행하지 않음.
+- P03 완료를 위해 강화 프롬프트의 짧은 항목, 중간/긴 항목, JSON·사실성, 연속 20건 시험과 최종 채택/제한/탈락 판정이 남음.
 
 ## 4. AI 라우팅 결정 기록
 
