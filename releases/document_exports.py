@@ -15,7 +15,8 @@ from reportlab.lib.styles import ParagraphStyle, getSampleStyleSheet
 from reportlab.lib.units import inch
 from reportlab.pdfbase import pdfmetrics
 from reportlab.pdfbase.ttfonts import TTFont
-from reportlab.platypus import Paragraph, SimpleDocTemplate, Spacer
+from reportlab.lib.utils import ImageReader
+from reportlab.platypus import Image as ReportLabImage, Paragraph, SimpleDocTemplate, Spacer
 
 from releases.reporting import support_line
 
@@ -116,6 +117,7 @@ def render_docx_bytes(report):
     document = Document()
     configure_docx_styles(document)
     section = document.sections[0]
+    branding = report["branding"]
 
     header = section.header.paragraphs[0]
     header.text = "POSTGRESQL UPGRADE BRIEF · APPROVED REPORT"
@@ -127,6 +129,10 @@ def render_docx_bytes(report):
     for run in footer.runs:
         set_run_font(run, size=9, color=MUTED)
 
+    if branding["logo_path"]:
+        logo = document.add_paragraph()
+        logo.paragraph_format.space_after = Pt(10)
+        logo.add_run().add_picture(branding["logo_path"], width=Inches(1.35))
     kicker = document.add_paragraph()
     kicker.paragraph_format.space_after = Pt(5)
     set_run_font(kicker.add_run("POSTGRESQL OFFICIAL RELEASE INTELLIGENCE"), size=9, bold=True, color=BLUE)
@@ -139,14 +145,21 @@ def render_docx_bytes(report):
 
     summary = report["summary"]
     document.add_heading("보고서 개요", level=1)
-    for label, value in (
+    summary_fields = [
         ("업그레이드 범위", f"{summary['from_version']} (제외) → {summary['to_version']} (포함)"),
         ("포함 릴리스", f"{summary['release_count']}개"),
         ("승인 항목", f"{len(report['items'])}개"),
         ("생성시각", report["generated_at"]),
+    ]
+    if branding["customer_name"]:
+        summary_fields.append(("고객명", branding["customer_name"]))
+    if branding["project_name"]:
+        summary_fields.append(("프로젝트명", branding["project_name"]))
+    summary_fields.extend([
         ("AS-IS 지원", support_line("AS-IS", summary["from_support"]).removeprefix("AS-IS: ")),
         ("TO-BE 지원", support_line("TO-BE", summary["to_support"]).removeprefix("TO-BE: ")),
-    ):
+    ])
+    for label, value in summary_fields:
         paragraph = document.add_paragraph()
         set_run_font(paragraph.add_run(f"{label}: "), bold=True)
         set_run_font(paragraph.add_run(value))
@@ -205,6 +218,7 @@ def render_pdf_bytes(report):
         author="PostgreSQL Upgrade Brief Generator",
     )
     styles = getSampleStyleSheet()
+    branding = report["branding"]
     body = ParagraphStyle("BodyKR", parent=styles["BodyText"], fontName=font_name, fontSize=10, leading=13.2, spaceAfter=6, textColor=HexColor("#18251F"))
     title = ParagraphStyle("TitleKR", parent=body, fontSize=23, leading=28, spaceAfter=5, textColor=HexColor("#18251F"))
     subtitle = ParagraphStyle("SubtitleKR", parent=body, fontSize=11, leading=14, spaceAfter=18, textColor=HexColor("#66756D"))
@@ -214,20 +228,34 @@ def render_pdf_bytes(report):
     source_style = ParagraphStyle("SourceKR", parent=body, fontSize=9, leading=12, spaceAfter=8, textColor=HexColor("#176B4D"))
 
     summary = report["summary"]
-    story = [
+    story = []
+    if branding["logo_path"]:
+        logo_width, logo_height = ImageReader(branding["logo_path"]).getSize()
+        logo_scale = min(1.35 * inch / logo_width, 0.58 * inch / logo_height)
+        report_logo = ReportLabImage(branding["logo_path"], width=logo_width * logo_scale, height=logo_height * logo_scale)
+        report_logo.hAlign = "LEFT"
+        story.extend([report_logo, Spacer(1, 8)])
+    story.extend([
         Paragraph("POSTGRESQL OFFICIAL RELEASE INTELLIGENCE", label),
         Paragraph(escape(report["title"]), title),
         Paragraph("고객 전달용 승인 보고서" if report["level"] == "customer" else "DBA 기술 검토용 승인 보고서", subtitle),
         Paragraph("보고서 개요", h1),
-    ]
-    for key, value in (
+    ])
+    summary_fields = [
         ("업그레이드 범위", f"{summary['from_version']} (제외) → {summary['to_version']} (포함)"),
         ("포함 릴리스", f"{summary['release_count']}개"),
         ("승인 항목", f"{len(report['items'])}개"),
         ("생성시각", report["generated_at"]),
+    ]
+    if branding["customer_name"]:
+        summary_fields.append(("고객명", branding["customer_name"]))
+    if branding["project_name"]:
+        summary_fields.append(("프로젝트명", branding["project_name"]))
+    summary_fields.extend([
         ("AS-IS 지원", support_line("AS-IS", summary["from_support"]).removeprefix("AS-IS: ")),
         ("TO-BE 지원", support_line("TO-BE", summary["to_support"]).removeprefix("TO-BE: ")),
-    ):
+    ])
+    for key, value in summary_fields:
         story.append(Paragraph(f"<b>{escape(key)}:</b> {escape(value)}", body))
     story.append(Paragraph("승인된 변경사항", h1))
 

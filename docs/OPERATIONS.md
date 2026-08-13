@@ -87,4 +87,10 @@ cd /opt/what_changes_postgresql && docker compose ps && docker compose logs --ta
 cd /opt/what_changes_postgresql && docker compose exec -T web python -c 'import urllib.request; print(urllib.request.urlopen("http://127.0.0.1:8000/health/", timeout=5).read().decode())'
 ```
 
+## 6. 고객 보고서 프로필
+
+관리자 화면의 `Report profiles`에서 고객명, 프로젝트명과 선택 로고를 등록한다. 로고는 2MB 이하 PNG/JPEG만 사용한다. 비활성 프로필은 새 비교·출력에서 선택할 수 없다.
+
+프로필 metadata는 PostgreSQL에, 로고는 `/app/data/generated_reports/media/report_profiles/logos/`에 저장된다. 두 위치 모두 백업 세트에 포함된다.
+
 운영 DB나 volume을 덮어쓰는 재난 복구는 이 문서의 격리 드릴과 다르다. 물리적으로 다른 VM과 실제 외부 백업 저장소 시험이 끝나기 전에는 P10을 완료 처리하지 않는다.

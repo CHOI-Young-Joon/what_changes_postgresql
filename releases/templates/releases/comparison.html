@@ -16,7 +16,7 @@
     .subtitle { margin:0; color:var(--muted); }
     .user { color:var(--muted); font-size:14px; white-space:nowrap; }
     .panel { background:var(--paper); border:1px solid var(--line); border-radius:14px; box-shadow:0 14px 40px rgba(28,57,43,.06); }
-    .selector { display:grid; grid-template-columns:1fr 1fr 1fr 1.35fr 1.2fr auto; gap:14px; align-items:end; padding:20px; }
+    .selector { display:grid; grid-template-columns:repeat(3,minmax(150px,1fr)) auto; gap:14px; align-items:end; padding:20px; }
     label { display:block; margin-bottom:6px; color:var(--muted); font-size:12px; font-weight:800; letter-spacing:.05em; }
     .field-control { width:100%; min-height:44px; border:1px solid #becbc4; border-radius:8px; background:#fff; color:var(--ink); padding:9px 11px; font:inherit; }
     .button { min-height:44px; border:0; border-radius:8px; background:var(--green); color:#fff; padding:0 22px; font-weight:800; cursor:pointer; }
@@ -72,6 +72,7 @@
       <div>{{ form.change_type.label_tag }}{{ form.change_type }}</div>
       <div>{{ form.area.label_tag }}{{ form.area }}</div>
       <div>{{ form.view_mode.label_tag }}{{ form.view_mode }}</div>
+      <div>{{ form.report_profile.label_tag }}{{ form.report_profile }}</div>
       <button class="button" type="submit">비교하기</button>
     </form>
 
@@ -88,12 +89,12 @@
       </section>
       {% if view_mode == "customer" or view_mode == "dba" %}
         <nav class="exports" aria-label="승인 보고서 출력"><strong>승인본 출력</strong>
-          <a href="{% url 'releases:export-report' %}?from_version={{ summary.from_version }}&to_version={{ summary.to_version }}&level={{ view_mode }}&format=text" target="_blank">일반 텍스트</a>
-          <a href="{% url 'releases:export-report' %}?from_version={{ summary.from_version }}&to_version={{ summary.to_version }}&level={{ view_mode }}&format=markdown" target="_blank">Markdown</a>
-          <a href="{% url 'releases:export-report' %}?from_version={{ summary.from_version }}&to_version={{ summary.to_version }}&level={{ view_mode }}&format=html" target="_blank">HTML</a>
-          <a href="{% url 'releases:export-report' %}?from_version={{ summary.from_version }}&to_version={{ summary.to_version }}&level={{ view_mode }}&format=html&download=1">HTML 다운로드</a>
-          <a href="{% url 'releases:export-report' %}?from_version={{ summary.from_version }}&to_version={{ summary.to_version }}&level={{ view_mode }}&format=docx">DOCX 다운로드</a>
-          <a href="{% url 'releases:export-report' %}?from_version={{ summary.from_version }}&to_version={{ summary.to_version }}&level={{ view_mode }}&format=pdf">PDF 다운로드</a>
+          <a href="{% url 'releases:export-report' %}?from_version={{ summary.from_version }}&to_version={{ summary.to_version }}&level={{ view_mode }}&profile={{ selected_profile_id }}&format=text" target="_blank">일반 텍스트</a>
+          <a href="{% url 'releases:export-report' %}?from_version={{ summary.from_version }}&to_version={{ summary.to_version }}&level={{ view_mode }}&profile={{ selected_profile_id }}&format=markdown" target="_blank">Markdown</a>
+          <a href="{% url 'releases:export-report' %}?from_version={{ summary.from_version }}&to_version={{ summary.to_version }}&level={{ view_mode }}&profile={{ selected_profile_id }}&format=html" target="_blank">HTML</a>
+          <a href="{% url 'releases:export-report' %}?from_version={{ summary.from_version }}&to_version={{ summary.to_version }}&level={{ view_mode }}&profile={{ selected_profile_id }}&format=html&download=1">HTML 다운로드</a>
+          <a href="{% url 'releases:export-report' %}?from_version={{ summary.from_version }}&to_version={{ summary.to_version }}&level={{ view_mode }}&profile={{ selected_profile_id }}&format=docx">DOCX 다운로드</a>
+          <a href="{% url 'releases:export-report' %}?from_version={{ summary.from_version }}&to_version={{ summary.to_version }}&level={{ view_mode }}&profile={{ selected_profile_id }}&format=pdf">PDF 다운로드</a>
         </nav>
       {% endif %}
 
@@ -122,9 +123,9 @@
       </section>
       {% if page_obj.paginator.num_pages > 1 %}
         <nav class="pagination" aria-label="페이지 이동">
-          {% if page_obj.has_previous %}<a href="?from_version={{ summary.from_version }}&to_version={{ summary.to_version }}&change_type={{ selected_type|urlencode }}&area={{ selected_area|urlencode }}&view_mode={{ view_mode }}&page={{ page_obj.previous_page_number }}">이전</a>{% endif %}
+          {% if page_obj.has_previous %}<a href="?from_version={{ summary.from_version }}&to_version={{ summary.to_version }}&change_type={{ selected_type|urlencode }}&area={{ selected_area|urlencode }}&view_mode={{ view_mode }}&report_profile={{ selected_profile_id }}&page={{ page_obj.previous_page_number }}">이전</a>{% endif %}
           <span>{{ page_obj.number }} / {{ page_obj.paginator.num_pages }}</span>
-          {% if page_obj.has_next %}<a href="?from_version={{ summary.from_version }}&to_version={{ summary.to_version }}&change_type={{ selected_type|urlencode }}&area={{ selected_area|urlencode }}&view_mode={{ view_mode }}&page={{ page_obj.next_page_number }}">다음</a>{% endif %}
+          {% if page_obj.has_next %}<a href="?from_version={{ summary.from_version }}&to_version={{ summary.to_version }}&change_type={{ selected_type|urlencode }}&area={{ selected_area|urlencode }}&view_mode={{ view_mode }}&report_profile={{ selected_profile_id }}&page={{ page_obj.next_page_number }}">다음</a>{% endif %}
         </nav>
       {% endif %}
     {% else %}

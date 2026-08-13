@@ -27,10 +27,13 @@ def comparison_view(request):
     selected_area = request.GET.get("area", "")
     selected_type = request.GET.get("change_type", "")
     view_mode = request.GET.get("view_mode", "review") or "review"
+    selected_profile_id = ""
 
     if form.is_bound and form.is_valid():
         from_version = form.cleaned_data["from_version"]
         to_version = form.cleaned_data["to_version"]
+        selected_profile = form.cleaned_data.get("report_profile")
+        selected_profile_id = str(selected_profile.pk) if selected_profile else ""
         try:
             summary = build_comparison_summary(from_version, to_version)
         except ValueError as exc:
@@ -72,6 +75,7 @@ def comparison_view(request):
             "selected_area": selected_area,
             "selected_type": selected_type,
             "view_mode": view_mode,
+            "selected_profile_id": selected_profile_id,
         },
     )
 
@@ -134,7 +138,7 @@ def export_report(request):
     if output_format not in renderers:
         return HttpResponse("Unsupported report format", status=400, content_type="text/plain")
     try:
-        report = build_approved_report(from_version, to_version, level)
+        report = build_approved_report(from_version, to_version, level, request.GET.get("profile"))
     except ValueError as exc:
         return HttpResponse(str(exc), status=400, content_type="text/plain")
 

@@ -1,7 +1,7 @@
 from django import forms
 
 from releases.comparison import PostgreSQLVersion
-from releases.models import ChangeItem, Release
+from releases.models import ChangeItem, Release, ReportProfile
 
 
 class ComparisonForm(forms.Form):
@@ -13,6 +13,12 @@ class ComparisonForm(forms.Form):
         label="보기 수준",
         required=False,
         choices=(("review", "내부 검토"), ("customer", "고객용 승인본"), ("dba", "DBA용 승인본")),
+    )
+    report_profile = forms.ModelChoiceField(
+        label="고객·프로젝트",
+        required=False,
+        queryset=ReportProfile.objects.none(),
+        empty_label="프로필 없음",
     )
 
     def __init__(self, *args, area_choices=(), **kwargs):
@@ -26,6 +32,7 @@ class ComparisonForm(forms.Form):
         self.fields["to_version"].choices = version_choices
         self.fields["change_type"].choices = [("", "전체 유형"), *ChangeItem.ChangeType.choices]
         self.fields["area"].choices = [("", "전체 분야"), *((area, area) for area in area_choices)]
+        self.fields["report_profile"].queryset = ReportProfile.objects.filter(is_active=True)
 
         for field in self.fields.values():
             field.widget.attrs["class"] = "field-control"

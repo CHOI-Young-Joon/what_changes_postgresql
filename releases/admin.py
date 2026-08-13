@@ -10,7 +10,16 @@ from .models import (
     VersionSupportSnapshot,
     Review,
     ReviewEvent,
+    ReportProfile,
 )
+
+
+@admin.register(ReportProfile)
+class ReportProfileAdmin(admin.ModelAdmin):
+    list_display = ("customer_name", "project_name", "is_active", "updated_at")
+    list_filter = ("is_active",)
+    search_fields = ("customer_name", "project_name")
+    readonly_fields = ("created_at", "updated_at")
 
 
 @admin.register(Release)

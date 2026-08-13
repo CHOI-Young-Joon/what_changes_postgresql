@@ -1,12 +1,16 @@
+from io import BytesIO
 from pathlib import Path
 from tempfile import TemporaryDirectory
 from unittest.mock import patch
 from urllib.error import URLError
 
 from django.core.management import call_command
+from django.core.exceptions import ValidationError
+from django.core.files.uploadedfile import SimpleUploadedFile
 from django.contrib.auth import get_user_model
-from django.test import SimpleTestCase, TestCase
+from django.test import SimpleTestCase, TestCase, override_settings
 from django.urls import reverse
+from PIL import Image
 
 from core.models import AuditLog
 
@@ -30,6 +34,7 @@ from .models import (
     ReleaseSection,
     Review,
     ReviewEvent,
+    ReportProfile,
     SourceSnapshot,
     VersionSupport,
     VersionSupportSnapshot,
@@ -227,6 +232,11 @@ class ReleaseSyncCommandTests(TestCase):
 
 class ComparisonViewTests(TestCase):
     def setUp(self):
+        self.media_directory = TemporaryDirectory()
+        self.addCleanup(self.media_directory.cleanup)
+        self.media_settings = override_settings(MEDIA_ROOT=self.media_directory.name)
+        self.media_settings.enable()
+        self.addCleanup(self.media_settings.disable)
         user_model = get_user_model()
         self.user = user_model.objects.create_user(username="reviewer", password="test-password")
         self.staff_user = user_model.objects.create_user(
@@ -411,3 +421,84 @@ class ComparisonViewTests(TestCase):
                 self.assertEqual(response.status_code, 200)
                 self.assertTrue(response.content.startswith(signature))
                 self.assertIn(f".{output_format}", response.headers["Content-Disposition"])
+
+    @staticmethod
+    def logo_upload():
+        output = BytesIO()
+        Image.new("RGB", (120, 40), color=(23, 107, 77)).save(output, format="PNG")
+        return SimpleUploadedFile("customer-logo.png", output.getvalue(), content_type="image/png")
+
+    def test_report_profile_is_applied_to_all_export_formats(self):
+        profile = ReportProfile.objects.create(
+            customer_name="고객사 예시",
+            project_name="PostgreSQL 전환 프로젝트",
+            logo=self.logo_upload(),
+        )
+        Review.objects.create(
+            change_item=self.target_item,
+            status=Review.Status.APPROVED,
+            edited_text="프로필 적용 승인 문구",
+            reviewer=self.staff_user,
+        )
+        self.client.force_login(self.user)
+
+        comparison = self.client.get(
+            "/",
+            {
+                "from_version": "17.10",
+                "to_version": "18.4",
+                "view_mode": "customer",
+                "report_profile": profile.pk,
+            },
+        )
+        self.assertContains(comparison, "고객사 예시 / PostgreSQL 전환 프로젝트")
+        self.assertContains(comparison, f"profile={profile.pk}")
+
+        for output_format, signature in (("text", None), ("markdown", None), ("html", None), ("docx", b"PK"), ("pdf", b"%PDF-")):
+            with self.subTest(output_format=output_format):
+                response = self.client.get(
+                    reverse("releases:export-report"),
+                    {
+                        "from_version": "17.10",
+                        "to_version": "18.4",
+                        "level": "customer",
+                        "profile": profile.pk,
+                        "format": output_format,
+                    },
+                )
+                self.assertEqual(response.status_code, 200)
+                if signature:
+                    self.assertTrue(response.content.startswith(signature))
+                else:
+                    self.assertContains(response, "고객사 예시")
+                    self.assertContains(response, "PostgreSQL 전환 프로젝트")
+                if output_format == "html":
+                    self.assertContains(response, "data:image/png;base64,")
+
+    def test_inactive_or_unknown_report_profile_is_rejected(self):
+        Review.objects.create(change_item=self.target_item, status=Review.Status.APPROVED, reviewer=self.staff_user)
+        inactive = ReportProfile.objects.create(customer_name="비활성 고객", project_name="종료 프로젝트", is_active=False)
+        self.client.force_login(self.user)
+        for profile_id in (inactive.pk, 999999):
+            with self.subTest(profile_id=profile_id):
+                response = self.client.get(
+                    reverse("releases:export-report"),
+                    {
+                        "from_version": "17.10",
+                        "to_version": "18.4",
+                        "level": "customer",
+                        "profile": profile_id,
+                        "format": "text",
+                    },
+                )
+                self.assertEqual(response.status_code, 400)
+                self.assertContains(response, "does not exist or is inactive", status_code=400)
+
+    def test_report_logo_larger_than_two_megabytes_is_rejected(self):
+        profile = ReportProfile(
+            customer_name="대용량 로고 고객",
+            project_name="프로젝트",
+            logo=SimpleUploadedFile("too-large.png", b"x" * (2 * 1024 * 1024 + 1), content_type="image/png"),
+        )
+        with self.assertRaises(ValidationError):
+            profile.full_clean()

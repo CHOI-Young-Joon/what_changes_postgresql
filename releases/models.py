@@ -1,4 +1,36 @@
 from django.db import models
+from django.core.exceptions import ValidationError
+from django.core.validators import FileExtensionValidator
+
+
+def validate_logo_size(value):
+    if value.size > 2 * 1024 * 1024:
+        raise ValidationError("로고 파일은 2MB 이하여야 합니다.")
+
+
+class ReportProfile(models.Model):
+    customer_name = models.CharField(max_length=200)
+    project_name = models.CharField(max_length=200)
+    logo = models.ImageField(
+        upload_to="report_profiles/logos/",
+        blank=True,
+        validators=[FileExtensionValidator(allowed_extensions=("png", "jpg", "jpeg")), validate_logo_size],
+    )
+    is_active = models.BooleanField(default=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ["customer_name", "project_name"]
+        constraints = [
+            models.UniqueConstraint(
+                fields=["customer_name", "project_name"],
+                name="unique_customer_project_report_profile",
+            )
+        ]
+
+    def __str__(self):
+        return f"{self.customer_name} / {self.project_name}"
 
 
 class Release(models.Model):
