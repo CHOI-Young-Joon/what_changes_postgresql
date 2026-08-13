@@ -5,7 +5,7 @@ from dataclasses import dataclass, field
 from bs4 import BeautifulSoup
 
 
-PARSER_VERSION = "1"
+PARSER_VERSION = "2"
 HEADING_NAMES = ("h1", "h2", "h3", "h4", "h5", "h6")
 SECTION_NUMBER_PATTERN = re.compile(r"^[A-Z]\.\d+(?:\.\d+)*\.?\s*")
 
@@ -49,6 +49,14 @@ def heading_source_id(heading):
     if ancestor and ancestor.get("id") != "docContent":
         return ancestor.get("id", "")
     return ""
+
+
+def extract_item_text(raw_html):
+    item_soup = BeautifulSoup(raw_html, "html.parser")
+    for anchor in item_soup.select("a.ulink"):
+        if anchor.get_text(" ", strip=True) == "§":
+            anchor.decompose()
+    return item_soup.get_text(" ", strip=True)
 
 
 def parse_release_document(html):
@@ -95,7 +103,7 @@ def parse_release_document(html):
 
         if node.name == "li" and node.find_parent("li") is None:
             raw_html = str(node)
-            text = node.get_text(" ", strip=True)
+            text = extract_item_text(raw_html)
             if text:
                 items.append(
                     ParsedItem(

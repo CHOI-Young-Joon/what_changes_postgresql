@@ -2,6 +2,7 @@ from django.contrib.auth.decorators import login_required
 from django.core.exceptions import PermissionDenied
 from django.core.paginator import Paginator
 from django.db import transaction
+from django.http import HttpResponse
 from django.shortcuts import get_object_or_404, redirect, render
 from django.urls import reverse
 from django.utils import timezone
@@ -11,6 +12,8 @@ from core.models import AuditLog
 from releases.comparison import build_comparison_summary
 from releases.forms import ComparisonForm, ReviewActionForm
 from releases.models import ChangeItem, Release, Review, ReviewEvent, SourceSnapshot
+from releases.reporting import build_approved_report, render_html, render_markdown, render_text
+from releases.document_exports import render_docx_bytes, render_pdf_bytes
 
 
 @login_required
@@ -113,3 +116,31 @@ def review_change_item(request, item_id):
     if not next_url.startswith("/") or next_url.startswith("//"):
         next_url = reverse("releases:comparison")
     return redirect(next_url)
+
+
+@login_required
+def export_report(request):
+    from_version = request.GET.get("from_version", "")
+    to_version = request.GET.get("to_version", "")
+    level = request.GET.get("level", "customer")
+    output_format = request.GET.get("format", "text")
+    renderers = {
+        "text": (render_text, "text/plain; charset=utf-8", "txt"),
+        "markdown": (render_markdown, "text/markdown; charset=utf-8", "md"),
+        "html": (render_html, "text/html; charset=utf-8", "html"),
+        "docx": (render_docx_bytes, "application/vnd.openxmlformats-officedocument.wordprocessingml.document", "docx"),
+        "pdf": (render_pdf_bytes, "application/pdf", "pdf"),
+    }
+    if output_format not in renderers:
+        return HttpResponse("Unsupported report format", status=400, content_type="text/plain")
+    try:
+        report = build_approved_report(from_version, to_version, level)
+    except ValueError as exc:
+        return HttpResponse(str(exc), status=400, content_type="text/plain")
+
+    renderer, content_type, extension = renderers[output_format]
+    response = HttpResponse(renderer(report), content_type=content_type)
+    if request.GET.get("download") == "1" or output_format in ("docx", "pdf"):
+        filename = f"postgresql-upgrade-{from_version}-to-{to_version}-{level}.{extension}"
+        response["Content-Disposition"] = f'attachment; filename="{filename}"'
+    return response

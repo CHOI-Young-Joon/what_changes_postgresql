@@ -18,7 +18,7 @@ from .collector import (
     parse_release_links,
     require_official_url,
 )
-from .parser import parse_release_document
+from .parser import extract_item_text, parse_release_document
 from .collector import FetchedDocument, RELEASE_INDEX_URL
 from .comparison import PostgreSQLVersion, versions_in_upgrade_range
 from .classifier import classify_change
@@ -87,6 +87,10 @@ class ReleaseDocumentParsingTests(SimpleTestCase):
         self.assertIn("Section introduction.", sections[1].body_text)
         self.assertEqual(len(items), 2)
         self.assertIn("Nested detail.", items[0].text)
+
+    def test_commit_link_markers_are_removed_from_text_but_not_raw_html(self):
+        raw_html = '<li><p>Fix issue <a class="ulink" href="https://postgr.es/c/one">§</a> <a class="ulink" href="https://postgr.es/c/two">§</a></p><p>Details.</p></li>'
+        self.assertEqual(extract_item_text(raw_html), "Fix issue Details.")
 
 
 class PostgreSQLVersionComparisonTests(SimpleTestCase):
@@ -347,3 +351,63 @@ class ComparisonViewTests(TestCase):
         self.assertEqual(response.context["page_obj"].paginator.count, 1)
         self.assertContains(response, "고객에게 표시할 승인 문구")
         self.assertNotContains(response, "Fix item for 18.0")
+
+    def test_report_exports_include_only_approved_edited_text(self):
+        Review.objects.create(
+            change_item=self.target_item,
+            status=Review.Status.APPROVED,
+            edited_text="메일에 넣을 승인 문구",
+            reviewer=self.staff_user,
+        )
+        self.client.force_login(self.user)
+        for output_format, content_type in (("text", "text/plain"), ("markdown", "text/markdown"), ("html", "text/html")):
+            with self.subTest(output_format=output_format):
+                response = self.client.get(
+                    reverse("releases:export-report"),
+                    {"from_version": "17.10", "to_version": "18.4", "level": "customer", "format": output_format},
+                )
+                self.assertEqual(response.status_code, 200)
+                self.assertEqual(response.headers["Content-Type"].split(";")[0], content_type)
+                self.assertContains(response, "메일에 넣을 승인 문구")
+                self.assertNotContains(response, "Fix item for 18.0")
+                self.assertContains(response, "https://www.postgresql.org/docs/release/18.4/")
+
+    def test_empty_approved_report_is_rejected(self):
+        self.client.force_login(self.user)
+        response = self.client.get(
+            reverse("releases:export-report"),
+            {"from_version": "17.10", "to_version": "18.4", "level": "customer", "format": "text"},
+        )
+        self.assertEqual(response.status_code, 400)
+        self.assertContains(response, "No approved change items", status_code=400)
+
+    def test_report_download_has_safe_filename(self):
+        Review.objects.create(change_item=self.target_item, status=Review.Status.APPROVED, reviewer=self.staff_user)
+        self.client.force_login(self.user)
+        response = self.client.get(
+            reverse("releases:export-report"),
+            {"from_version": "17.10", "to_version": "18.4", "level": "dba", "format": "markdown", "download": "1"},
+        )
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(
+            response.headers["Content-Disposition"],
+            'attachment; filename="postgresql-upgrade-17.10-to-18.4-dba.md"',
+        )
+
+    def test_docx_and_pdf_downloads_have_valid_signatures(self):
+        Review.objects.create(
+            change_item=self.target_item,
+            status=Review.Status.APPROVED,
+            edited_text="문서 파일 승인 문구",
+            reviewer=self.staff_user,
+        )
+        self.client.force_login(self.user)
+        for output_format, signature in (("docx", b"PK"), ("pdf", b"%PDF-")):
+            with self.subTest(output_format=output_format):
+                response = self.client.get(
+                    reverse("releases:export-report"),
+                    {"from_version": "17.10", "to_version": "18.4", "level": "customer", "format": output_format},
+                )
+                self.assertEqual(response.status_code, 200)
+                self.assertTrue(response.content.startswith(signature))
+                self.assertIn(f".{output_format}", response.headers["Content-Disposition"])
