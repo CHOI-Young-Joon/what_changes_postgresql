@@ -135,15 +135,15 @@ services:
 
 networks:
   backend:
-    name: what_changes_postgresql_backend
+    name: ${COMPOSE_PROJECT_NAME:-what_changes_postgresql}_backend
     internal: true
   outbound:
-    name: what_changes_postgresql_outbound
+    name: ${COMPOSE_PROJECT_NAME:-what_changes_postgresql}_outbound
 
 volumes:
   postgres_data:
-    name: what_changes_postgresql_postgres_data
+    name: ${COMPOSE_PROJECT_NAME:-what_changes_postgresql}_postgres_data
   source_snapshots:
-    name: what_changes_postgresql_source_snapshots
+    name: ${COMPOSE_PROJECT_NAME:-what_changes_postgresql}_source_snapshots
   generated_reports:
-    name: what_changes_postgresql_generated_reports
+    name: ${COMPOSE_PROJECT_NAME:-what_changes_postgresql}_generated_reports

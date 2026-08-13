@@ -55,6 +55,14 @@ sudo systemctl start what-changes-postgresql-backup.service && sudo systemctl st
 
 성공 시 체크섬과 tar 검증, 임시 DB 복원, 핵심 테이블 건수를 출력한 뒤 임시 DB를 제거한다.
 
+운영 환경과 격리된 빈 Compose 프로젝트에 DB와 두 파일 볼륨을 모두 복원하고, 외부망을 끈 웹에서 기존 비교 조회까지 확인하는 드릴:
+
+```sh
+/opt/what_changes_postgresql/ops/backup/drill_full_restore.sh /mnt/what-changes-backup/what_changes_postgresql/<UTC_TIMESTAMP>
+```
+
+드릴은 운영과 다른 컨테이너·네트워크·볼륨 이름을 강제하며 성공·실패와 관계없이 드릴 자원을 제거한다. 운영 Compose 프로젝트명은 드릴 대상으로 사용할 수 없다.
+
 ## 4. 상태 감시
 
 상태 감시는 매시간 루트 디스크와 `db`, `web` 컨테이너를 검사한다. 디스크 사용률 70% 이상 또는 컨테이너 비정상 시 service가 실패하고 journal에 `CRITICAL`을 기록한다.
@@ -79,4 +87,4 @@ cd /opt/what_changes_postgresql && docker compose ps && docker compose logs --ta
 cd /opt/what_changes_postgresql && docker compose exec -T web python -c 'import urllib.request; print(urllib.request.urlopen("http://127.0.0.1:8000/health/", timeout=5).read().decode())'
 ```
 
-운영 DB나 volume을 삭제하는 전체 복구는 이 문서의 검증 명령과 다르다. 빈 VM 전체 복구 자동화와 실제 외부 백업 저장소 시험이 끝나기 전에는 P10을 완료 처리하지 않는다.
+운영 DB나 volume을 덮어쓰는 재난 복구는 이 문서의 격리 드릴과 다르다. 물리적으로 다른 VM과 실제 외부 백업 저장소 시험이 끝나기 전에는 P10을 완료 처리하지 않는다.

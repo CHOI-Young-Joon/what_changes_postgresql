@@ -22,7 +22,7 @@
 | P07 | AI 및 OmniRoute | 대기 | 라우팅 순서만 확정 | 비AI 데이터 기반보다 후순위 | P04~P10 완료 후 진행 |
 | P08 | 검수 및 고객 화면 | 진행 | 비AI 원문 비교·필터·승인/반려·수정 이력·고객/DBA 승인본 구현 및 검증 | AI 요약 대조 칸은 P07과 함께 마지막에 연결 | P09 출력 구현 후 AI 단계에서 최종 완료 판정 |
 | P09 | 출력 문서 | 진행 | 승인 항목 전용 텍스트·Markdown·HTML·DOCX·PDF 출력과 다운로드, 한글 문서 시각 검증 완료 | 고객명·프로젝트명·로고, HTTPS 클립보드 검증 미구현 | 출력 메타데이터 구현 후 프록시·HTTPS 단계에서 완료 판정 |
-| P10 | 운영과 복구 | 진행 | 외부경로 강제 백업·체크섬·임시 DB 복원 검증, 70% 디스크 및 컨테이너 health 감시 구현 | 외부 백업 위치·외부 알림·빈 VM 전체 복구 시험 미정 | health timer 설치 후 외부 저장소 확정 |
+| P10 | 운영과 복구 | 진행 | 외부경로 강제 백업·체크섬, 격리된 빈 환경 전체 복원, 70% 디스크 및 컨테이너 health timer 구현·검증 | 실제 외부 저장소·외부 알림·VM 재부팅 후 자동복구 시험 미정 | 외부 저장소 확정 및 재부팅 검증 |
 | P11 | 시범 검증과 출시 | 대기 | 미착수 | 없음 | P00~P10 이후 진행 |
 
 ### 2026-08-13 / P04 / Django·PostgreSQL 최소 실행 골격
@@ -945,6 +945,7 @@ PDF signature: %PDF-
 - 임시 디렉터리에 완성한 뒤 timestamp 디렉터리로 이동하고 기본 35일 보존.
 - VM 루트와 `tmpfs`, `devtmpfs`, `overlay`, `squashfs`는 외부 백업 경로로 인정하지 않고 실패.
 - 운영 DB를 덮지 않는 임시 검증 DB 복원 명령 구현.
+- 운영과 이름이 겹치지 않는 별도 Compose 프로젝트에 DB·원문·생성 문서 볼륨을 모두 복원하는 전체 드릴 구현.
 - 수집·지원정보·파싱·분류 4단계를 하나의 flock 구간으로 묶어 백업과 동시 실행되지 않도록 보완.
 - 디스크 70%와 `db`/`web` container health를 검사하는 hourly systemd unit 추가.
 - `docs/OPERATIONS.md`에 외부 저장소 준비, timer 설치, 검증, 장애 확인 절차 기록.
@@ -967,13 +968,21 @@ tar 무결성: 2종 통과
 강제 1% 기준: CRITICAL 및 exit 1 통과
 db/web: running, healthy
 systemd-analyze verify: 통과
+systemd 설치: sync timer 및 health timer enabled/active
+health oneshot: Result=success, ExecMainStatus=0
+격리 전체 복원 DB: 346 / 346 / 15,521건
+격리 전체 복원 원문 파일: 347개(릴리스 346 + 지원정보 1)
+격리 전체 복원 생성 문서: 0개(운영 원본과 동일)
+복원 웹: healthy, database up
+복원 웹 outbound network 차단: 성공
+외부망 차단 후 9.2.10 → 18.4 비교: 13,110건
+드릴 컨테이너/볼륨/네트워크/백업: 시험 후 제거
 ```
 
 남은 조건:
 
-- `sudo` 인증이 필요해 갱신된 수집 service와 health timer의 `/etc/systemd/system` 설치는 사용자 명령 1회 필요.
 - 실제 NFS/NAS/별도 디스크 경로가 정해질 때까지 backup timer는 의도적으로 활성화하지 않음.
-- 외부 알림 채널과 빈 VM 전체 복구 자동화·시험이 남아 있으므로 P10은 `진행` 유지.
+- 외부 알림 채널, 물리적으로 다른 VM 복구, VM 재부팅 후 자동복구 시험이 남아 있으므로 P10은 `진행` 유지.
 
 ## 4. AI 라우팅 결정 기록
 
