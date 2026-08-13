@@ -61,8 +61,8 @@ services:
         condition: service_completed_successfully
       db:
         condition: service_healthy
-    expose:
-      - "8000"
+    ports:
+      - "${WEB_BIND_ADDRESS:-10.65.50.99}:80:8000"
     networks:
       - backend
       - outbound

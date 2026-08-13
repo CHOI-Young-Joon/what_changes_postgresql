@@ -6,7 +6,9 @@
 - 운영 데이터: PostgreSQL, `source_snapshots`, `generated_reports` Docker volume
 - 일일 수집: `what-changes-postgresql-sync.timer`
 - 상태 감시: `what-changes-postgresql-health.timer`
-- 외부 공개 포트: 없음
+- 내부 접속 주소: `http://10.65.50.99`
+- 공개 포트: 웹 TCP 80만 `10.65.50.99`에 바인딩
+- PostgreSQL 5432와 Ollama 11434: 호스트에 공개하지 않음
 
 ## 2. 외부 백업 저장소 준비
 
