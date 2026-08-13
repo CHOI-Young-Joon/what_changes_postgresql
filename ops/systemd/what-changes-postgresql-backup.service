@@ -1,0 +1,19 @@
+[Unit]
+Description=Back up PostgreSQL Upgrade Brief data
+Requires=docker.service
+After=docker.service network-online.target what-changes-postgresql-sync.service
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+User=rock
+Group=rock
+WorkingDirectory=/opt/what_changes_postgresql
+EnvironmentFile=/etc/what-changes-postgresql/backup.env
+RuntimeDirectory=what-changes-postgresql
+RuntimeDirectoryMode=0750
+ExecStart=/usr/bin/flock /run/what-changes-postgresql/sync.lock /opt/what_changes_postgresql/ops/backup/backup.sh
+TimeoutStartSec=2h
+Nice=10
+IOSchedulingClass=idle
+UMask=0077

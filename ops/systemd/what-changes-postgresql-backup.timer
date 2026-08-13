@@ -1,0 +1,11 @@
+[Unit]
+Description=Daily PostgreSQL Upgrade Brief backup
+
+[Timer]
+OnCalendar=*-*-* 05:00:00 Asia/Seoul
+RandomizedDelaySec=30m
+Persistent=true
+Unit=what-changes-postgresql-backup.service
+
+[Install]
+WantedBy=timers.target

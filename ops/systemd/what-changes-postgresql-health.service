@@ -1,0 +1,13 @@
+[Unit]
+Description=Check PostgreSQL Upgrade Brief service and disk health
+Requires=docker.service
+After=docker.service
+
+[Service]
+Type=oneshot
+User=rock
+Group=rock
+WorkingDirectory=/opt/what_changes_postgresql
+Environment=WHAT_CHANGES_DISK_WARNING_PERCENT=70
+ExecStart=/opt/what_changes_postgresql/ops/monitor/health_check.sh
+UMask=0027

@@ -1,0 +1,11 @@
+[Unit]
+Description=Hourly PostgreSQL Upgrade Brief health check
+
+[Timer]
+OnBootSec=5m
+OnUnitActiveSec=1h
+Persistent=true
+Unit=what-changes-postgresql-health.service
+
+[Install]
+WantedBy=timers.target
