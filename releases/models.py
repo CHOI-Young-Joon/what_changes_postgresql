@@ -72,12 +72,24 @@ class ReleaseSection(models.Model):
 
 
 class ChangeItem(models.Model):
+    class ChangeType(models.TextChoices):
+        ADDED = "added", "Added"
+        CHANGED = "changed", "Changed"
+        DEPRECATED = "deprecated", "Deprecated"
+        REMOVED = "removed", "Removed"
+        FIXED = "fixed", "Fixed"
+        SECURITY = "security", "Security"
+        OTHER = "other", "Other"
+
     snapshot = models.ForeignKey(SourceSnapshot, on_delete=models.CASCADE, related_name="change_items")
     section = models.ForeignKey(ReleaseSection, on_delete=models.CASCADE, related_name="change_items")
     position = models.PositiveIntegerField()
     item_sha256 = models.CharField(max_length=64)
     text = models.TextField()
     raw_html = models.TextField()
+    change_type = models.CharField(max_length=16, choices=ChangeType.choices, default=ChangeType.OTHER)
+    classification_rule = models.CharField(max_length=100, blank=True)
+    classification_version = models.CharField(max_length=32, blank=True)
 
     class Meta:
         ordering = ["position"]
@@ -87,6 +99,37 @@ class ChangeItem(models.Model):
 
     def __str__(self):
         return f"{self.snapshot.release.version} / item {self.position}"
+
+
+class VersionSupportSnapshot(models.Model):
+    source_url = models.URLField(max_length=500)
+    content_sha256 = models.CharField(max_length=64, unique=True)
+    raw_html = models.TextField()
+    storage_path = models.CharField(max_length=500)
+    fetched_at = models.DateTimeField(auto_now_add=True)
+    is_current = models.BooleanField(default=True)
+
+    class Meta:
+        ordering = ["-fetched_at"]
+
+    def __str__(self):
+        return f"Version support / {self.content_sha256[:12]}"
+
+
+class VersionSupport(models.Model):
+    series = models.CharField(max_length=16, unique=True)
+    current_minor = models.CharField(max_length=32)
+    supported = models.BooleanField()
+    first_release_date = models.DateField()
+    final_release_date = models.DateField()
+    snapshot = models.ForeignKey(VersionSupportSnapshot, on_delete=models.PROTECT, related_name="support_rows")
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ["-first_release_date"]
+
+    def __str__(self):
+        return f"PostgreSQL {self.series} ({'supported' if self.supported else 'unsupported'})"
 
 
 class JobRun(models.Model):

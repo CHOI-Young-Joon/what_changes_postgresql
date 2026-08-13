@@ -6,7 +6,7 @@ from django.conf import settings
 from django.core.management.base import BaseCommand, CommandError
 from django.db.models import Count
 
-from releases.models import Release, SourceSnapshot
+from releases.models import Release, SourceSnapshot, VersionSupportSnapshot
 
 
 class Command(BaseCommand):
@@ -45,7 +45,18 @@ class Command(BaseCommand):
             "missing_dates": Release.objects.filter(release_date__isnull=True).count(),
             "total_file_bytes": total_file_bytes,
         }
+        support_missing_files = []
+        support_hash_mismatches = []
+        for snapshot in VersionSupportSnapshot.objects.all():
+            file_path = root / snapshot.storage_path
+            if not file_path.is_file():
+                support_missing_files.append(snapshot.content_sha256)
+                continue
+            if hashlib.sha256(file_path.read_bytes()).hexdigest() != snapshot.content_sha256:
+                support_hash_mismatches.append(snapshot.content_sha256)
+        result["support_missing_files"] = support_missing_files
+        result["support_hash_mismatches"] = support_hash_mismatches
         self.stdout.write(json.dumps(result, ensure_ascii=False, sort_keys=True))
 
-        if missing_files or hash_mismatches or duplicate_current:
+        if missing_files or hash_mismatches or duplicate_current or support_missing_files or support_hash_mismatches:
             raise CommandError("Snapshot verification failed")

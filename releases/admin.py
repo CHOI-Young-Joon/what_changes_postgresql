@@ -1,6 +1,14 @@
 from django.contrib import admin
 
-from .models import ChangeItem, JobRun, Release, ReleaseSection, SourceSnapshot
+from .models import (
+    ChangeItem,
+    JobRun,
+    Release,
+    ReleaseSection,
+    SourceSnapshot,
+    VersionSupport,
+    VersionSupportSnapshot,
+)
 
 
 @admin.register(Release)
@@ -71,9 +79,20 @@ class ReleaseSectionAdmin(admin.ModelAdmin):
 
 @admin.register(ChangeItem)
 class ChangeItemAdmin(admin.ModelAdmin):
-    list_display = ("release_version", "position", "section", "text_preview")
+    list_display = ("release_version", "position", "change_type", "section", "text_preview")
+    list_filter = ("change_type", "classification_version")
     search_fields = ("snapshot__release__version", "section__title", "text", "item_sha256")
-    readonly_fields = ("snapshot", "section", "position", "item_sha256", "text", "raw_html")
+    readonly_fields = (
+        "snapshot",
+        "section",
+        "position",
+        "item_sha256",
+        "text",
+        "raw_html",
+        "change_type",
+        "classification_rule",
+        "classification_version",
+    )
 
     @admin.display(description="Release")
     def release_version(self, obj):
@@ -82,6 +101,43 @@ class ChangeItemAdmin(admin.ModelAdmin):
     @admin.display(description="Text")
     def text_preview(self, obj):
         return obj.text[:120]
+
+    def has_add_permission(self, request):
+        return False
+
+    def has_change_permission(self, request, obj=None):
+        return False
+
+    def has_delete_permission(self, request, obj=None):
+        return False
+
+
+@admin.register(VersionSupport)
+class VersionSupportAdmin(admin.ModelAdmin):
+    list_display = ("series", "current_minor", "supported", "first_release_date", "final_release_date", "updated_at")
+    list_filter = ("supported",)
+    search_fields = ("series", "current_minor")
+    readonly_fields = ("series", "current_minor", "supported", "first_release_date", "final_release_date", "snapshot", "updated_at")
+
+    def has_add_permission(self, request):
+        return False
+
+    def has_change_permission(self, request, obj=None):
+        return False
+
+    def has_delete_permission(self, request, obj=None):
+        return False
+
+
+@admin.register(VersionSupportSnapshot)
+class VersionSupportSnapshotAdmin(admin.ModelAdmin):
+    list_display = ("fetched_at", "content_sha256_short", "is_current")
+    list_filter = ("is_current",)
+    readonly_fields = ("source_url", "content_sha256", "raw_html", "storage_path", "fetched_at", "is_current")
+
+    @admin.display(description="SHA-256")
+    def content_sha256_short(self, obj):
+        return obj.content_sha256[:12]
 
     def has_add_permission(self, request):
         return False

@@ -16,6 +16,9 @@ from .collector import (
 )
 from .parser import parse_release_document
 from .collector import FetchedDocument, RELEASE_INDEX_URL
+from .comparison import PostgreSQLVersion, versions_in_upgrade_range
+from .classifier import classify_change
+from .support import parse_version_support
 from .models import JobRun, Release, SourceSnapshot
 
 
@@ -70,6 +73,73 @@ class ReleaseDocumentParsingTests(SimpleTestCase):
         self.assertIn("Section introduction.", sections[1].body_text)
         self.assertEqual(len(items), 2)
         self.assertIn("Nested detail.", items[0].text)
+
+
+class PostgreSQLVersionComparisonTests(SimpleTestCase):
+    def test_pre_10_and_post_10_versions_sort_correctly(self):
+        values = ["18.4", "9.2.10", "10.0", "9.2.11", "17.10"]
+        ordered = [version.value for version in sorted(PostgreSQLVersion.parse(value) for value in values)]
+        self.assertEqual(ordered, ["9.2.10", "9.2.11", "10.0", "17.10", "18.4"])
+
+    def test_prereleases_sort_before_initial_stable_release(self):
+        values = ["19.0", "19rc1", "19beta2", "19beta1"]
+        ordered = [version.value for version in sorted(PostgreSQLVersion.parse(value) for value in values)]
+        self.assertEqual(ordered, ["19beta1", "19beta2", "19rc1", "19.0"])
+
+    def test_range_excludes_from_and_includes_to(self):
+        available = ["9.2.10", "9.2.11", "9.3.0", "10.0", "10.1"]
+        self.assertEqual(
+            versions_in_upgrade_range(available, "9.2.10", "10.0"),
+            ["9.2.11", "9.3.0", "10.0"],
+        )
+
+    def test_reverse_or_unknown_range_is_rejected(self):
+        with self.assertRaises(ValueError):
+            versions_in_upgrade_range(["17.0", "18.0"], "18.0", "17.0")
+        with self.assertRaises(ValueError):
+            versions_in_upgrade_range(["17.0", "18.0"], "16.0", "18.0")
+
+    def test_prereleases_are_excluded_by_default_and_can_be_included(self):
+        available = ["18.0", "19beta1", "19rc1", "19.0"]
+        self.assertEqual(versions_in_upgrade_range(available, "18.0", "19.0"), ["19.0"])
+        self.assertEqual(
+            versions_in_upgrade_range(available, "18.0", "19.0", include_prereleases=True),
+            ["19beta1", "19rc1", "19.0"],
+        )
+        with self.assertRaises(ValueError):
+            versions_in_upgrade_range(available, "18.0", "19rc1")
+
+
+class VersionSupportParsingTests(SimpleTestCase):
+    def test_official_support_table_is_parsed(self):
+        html = """
+          <table><thead><tr><th>Version</th><th>Current minor</th><th>Supported</th><th>First Release</th><th>Final Release</th></tr></thead>
+          <tbody><tr><td>18</td><td>18.4</td><td>Yes</td><td>September 25, 2025</td><td>November 14, 2030</td></tr>
+          <tr><td>13</td><td>13.23</td><td>No</td><td>September 24, 2020</td><td>November 13, 2025</td></tr></tbody></table>
+        """
+        rows = parse_version_support(html)
+        self.assertEqual(len(rows), 2)
+        self.assertTrue(rows[0].supported)
+        self.assertEqual(str(rows[0].final_release_date), "2030-11-14")
+        self.assertFalse(rows[1].supported)
+
+
+class ChangeClassificationTests(SimpleTestCase):
+    def test_explicit_change_language_is_classified(self):
+        cases = {
+            "Add support for a new data type": "added",
+            "Remove obsolete server parameter": "removed",
+            "Deprecate the old function": "deprecated",
+            "Fix incorrect query results": "fixed",
+            "Improve planner behavior": "changed",
+            "Repair security vulnerability CVE-2026-1234": "security",
+            "Documentation wording only": "other",
+            "Fix failure to remove non-first table segments": "fixed",
+            "Fix visibility of obsolete row versions": "fixed",
+        }
+        for text, expected in cases.items():
+            with self.subTest(text=text):
+                self.assertEqual(classify_change(text).change_type, expected)
 
 
 class ReleaseSyncCommandTests(TestCase):
