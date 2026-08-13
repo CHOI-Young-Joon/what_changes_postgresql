@@ -1,0 +1,42 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "type": "object",
+  "additionalProperties": false,
+  "properties": {
+    "source_id": {"type": "string"},
+    "change_type": {
+      "type": "string",
+      "enum": ["added", "changed", "deprecated", "removed", "fixed", "security", "compatibility"]
+    },
+    "title_ko": {"type": "string", "maxLength": 80},
+    "summary_ko": {"type": "string", "maxLength": 200},
+    "customer_impact": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "level": {"type": "string", "enum": ["high", "medium", "low", "unknown"]},
+        "description_ko": {"type": "string", "maxLength": 160}
+      },
+      "required": ["level", "description_ko"]
+    },
+    "required_actions_ko": {"type": "array", "maxItems": 3, "items": {"type": "string", "maxLength": 120}},
+    "added_items": {"type": "array", "maxItems": 5, "items": {"type": "string", "maxLength": 120}},
+    "changed_items": {"type": "array", "maxItems": 5, "items": {"type": "string", "maxLength": 120}},
+    "removed_items": {"type": "array", "maxItems": 5, "items": {"type": "string", "maxLength": 120}},
+    "evidence_quotes_en": {"type": "array", "maxItems": 3, "items": {"type": "string", "maxLength": 240}},
+    "uncertainties_ko": {"type": "array", "maxItems": 3, "items": {"type": "string", "maxLength": 120}}
+  },
+  "required": [
+    "source_id",
+    "change_type",
+    "title_ko",
+    "summary_ko",
+    "customer_impact",
+    "required_actions_ko",
+    "added_items",
+    "changed_items",
+    "removed_items",
+    "evidence_quotes_en",
+    "uncertainties_ko"
+  ]
+}

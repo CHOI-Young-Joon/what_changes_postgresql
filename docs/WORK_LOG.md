@@ -14,13 +14,13 @@
 |---|---|---|---|---|---|
 | P00 | 문서 및 Git 기준선 | 완료 | 계획서·작업기록·제외규칙 작성 및 GitHub `main` 동기화, 기준 커밋 `38215ae` | 없음 | 변경마다 기록과 동기화 유지 |
 | P01 | VM 안정화 | 완료 | NTP·서울 시간대·OS 업데이트·재부팅·SSH 검증 완료, UFW 수신 기본 차단 및 OpenSSH만 허용, `/opt/what_changes_postgresql` 확정 | SSH 비밀번호 인증은 활성 상태이나 현재 P01 완료 조건 범위 밖 | P02 진행, SSH 추가 강화는 별도 작업으로 관리 |
-| P02 | 컨테이너 실행 기반 | 완료 | Docker Engine·Compose 설치, 전역 로그 제한·live-restore 적용, 내부 네트워크·볼륨·healthcheck·자원 제한·재부팅 자동 복구 실증 | 운영 서비스가 아직 없어 실제 운영 네트워크·볼륨은 P04에서 생성됨 | P03 정식 Ollama 준비 후 계획된 벤치마크 진행 |
-| P03 | 로컬 Ollama 벤치마크 | 진행 | 공식 `0.32.9` Docker 서비스와 내부 API 구성, `ornith:9b` 운영 경로 이전·인식 완료, 짧은 항목 1차 시험 완료 | 1차 시험은 속도·메모리·JSON 통과, 사실성 실패 | 강화 프롬프트 재시험 후 중간·긴 항목과 20건 연속 시험 |
-| P04 | 애플리케이션 골격 | 대기 | 미착수 | 없음 | P02 이후 진행 |
+| P02 | 컨테이너 실행 기반 | 완료 | Docker Engine·Compose 설치, 전역 로그 제한·live-restore 적용, 내부 네트워크·볼륨·healthcheck·자원 제한·재부팅 자동 복구 실증 | 운영 서비스가 아직 없어 실제 운영 네트워크·볼륨은 P04에서 생성됨 | P04 애플리케이션·DB 골격 진행 |
+| P03 | 로컬 Ollama 벤치마크 | 대기 | 공식 `0.32.9` 비root Docker 서비스와 전용 모델 구성, 강화 짧은 v2/v3 시험 완료 | v3도 97.43초로 속도 기준 실패, AI 우선순위를 마지막으로 변경 | P04~P10 비AI 기반 완료 후 재개 |
+| P04 | 애플리케이션 골격 | 진행 | 착수 준비 | 없음 | Django·PostgreSQL·worker·scheduler 골격 구성 |
 | P05 | 공식 문서 수집기 | 대기 | 미착수 | 없음 | P04 이후 진행 |
 | P06 | 버전 비교 엔진 | 대기 | 미착수 | 없음 | P05 이후 진행 |
-| P07 | AI 및 OmniRoute | 대기 | 라우팅 순서만 확정 | 공급자 API 키와 무료 한도 미확인 | P03 결과 후 연결 |
-| P08 | 검수 및 고객 화면 | 대기 | 미착수 | 없음 | P07 이후 진행 |
+| P07 | AI 및 OmniRoute | 대기 | 라우팅 순서만 확정 | 비AI 데이터 기반보다 후순위 | P04~P10 완료 후 진행 |
+| P08 | 검수 및 고객 화면 | 대기 | 미착수 | 없음 | P06 이후 원문 중심 화면부터 진행 |
 | P09 | 출력 문서 | 대기 | 미착수 | 도메인/HTTPS 미정 | P08 이후 진행 |
 | P10 | 운영과 복구 | 대기 | 미착수 | 외부 백업 위치 미정 | 배포 전 확정 |
 | P11 | 시범 검증과 출시 | 대기 | 미착수 | 없음 | P00~P10 이후 진행 |
@@ -447,6 +447,145 @@ Disk available: 70GB
 - 기존 native 설치 약 2.1GB는 강화 벤치마크 완료 전까지 롤백용으로 유지.
 - 이 단계에서는 프롬프트나 모델 메모리 로딩을 수행하지 않음.
 - P03 완료를 위해 강화 프롬프트의 짧은 항목, 중간/긴 항목, JSON·사실성, 연속 20건 시험과 최종 채택/제한/탈락 판정이 남음.
+
+### 2026-08-12 / P03 / 전용 모델과 강화 짧은 시험 후 작업 중지
+
+사전 고지:
+
+- 설치 순서를 완료한 뒤에만 프롬프트 시험을 시작한다고 알림.
+- 원본 `ornith:9b`는 변경하지 않고 PostgreSQL 요약 전용 파생 모델을 만든다고 알림.
+- JSON Schema, `think=false`, temperature 0, 공식 PostgreSQL 원문으로 시험한다고 알림.
+- 짧은 항목 결과를 확인하기 전에는 중간/긴 항목으로 넘어가지 않는다고 알림.
+
+추가 구성:
+
+- `ai/ollama/Modelfile`에 원문 한정, exact evidence, 불명확 영향 `unknown`, 빈 배열 사용 규칙 정의.
+- `benchmarks/ollama/schema.json`에 고객용 요약 결과의 JSON Schema 정의.
+- 공식 PostgreSQL 릴리스 노트 기반 짧은 167자, 중간 286자, 긴 896자 시험 원문 구성.
+- Python 표준 라이브러리만 사용하는 `benchmarks/ollama/run.py` 작성.
+- 실행기가 JSON parse, 필수 키, 타입, source ID, evidence의 원문 exact substring 포함 여부를 자동 검사하도록 구성.
+
+비root 전환과 오류 처리:
+
+- root 컨테이너에서 capability를 모두 제거한 상태로 파생 모델 생성 시 blob `chtimes` 권한 오류 발생.
+- 데이터 용량 증가 0, 파생 manifest 미생성 확인 후 임의 capability 추가 대신 컨테이너를 UID/GID `1000:1000`으로 전환.
+- 최초 비root 전환은 모델 mount가 `/root/.ollama/models`여서 `/root` 경로 통과 권한 오류로 재시작 루프 발생.
+- 내부 mount를 `/models`, `OLLAMA_MODELS=/models`, `HOME=/tmp`로 변경해 복구.
+- 최종 컨테이너는 UID/GID `1000:1000`, capability 전체 제거, `healthy`, 외부 publish 포트 없음.
+- 이미지 내부 사용자명은 `ubuntu`지만 숫자 UID/GID가 호스트 `rock` 소유 모델 파일과 일치함.
+
+파일 동기화 오류와 복구:
+
+- 최초 `rsync` 대상 지정 오류로 `ai/`와 `benchmarks/` 파일이 서버의 `/opt/what_changes_postgresql/ollama`에 합쳐짐.
+- 오배치 디렉터리에 이번 전송 파일만 존재함을 확인한 뒤 정확한 상대 경로로 재전송하고 오배치 디렉터리만 삭제.
+- 모델 데이터 경로 `/opt/what_changes_postgresql/data/ollama/models` 5.3GB와 원본 manifest가 유지됨을 재검증.
+- tmpfs `/tmp`로 `docker compose cp`가 성공 메시지를 출력해도 파일이 남지 않는 동작을 확인.
+- 일회성 비root Ollama CLI 컨테이너에 Modelfile을 read-only bind mount하는 방식으로 전환.
+
+전용 파생 모델 결과:
+
+```text
+Model: ornith-pg-brief:9b
+Model ID: c29efbd00a98
+Base model: ornith:9b
+저장 증가량: 2,080 bytes
+temperature: 0
+top_k: 10
+top_p: 0.8
+num_ctx: 4096
+num_predict: 768 (첫 시험 시점)
+```
+
+- 기존 5.6GB blob을 재사용하고 SYSTEM/파라미터 layer와 manifest만 추가됨.
+- 생성 직후 모델이 메모리에 로딩되지 않은 상태 확인.
+
+강화 짧은 시험:
+
+- 입력: PostgreSQL 18 `uuidv7()`/`uuidv4()` 공식 릴리스 노트 발췌 167자.
+- JSON Schema를 API `format`에 전달하고 `think=false`, temperature 0, seed 42로 실행.
+- 결과 파일: 서버 `/opt/what_changes_postgresql/data/benchmarks/short-v2.json`.
+
+```text
+JSON Schema/parse: 통과
+source_id: 통과
+evidence exact substring 3개: 통과
+원문 밖 고객 영향/조치: 생성하지 않음
+customer impact: unknown / 빈 설명
+사실성: 통과
+wall time: 138.000초
+model load: 17.858초
+prompt: 545 tokens / 46.845초
+output: 248 tokens / 73.260초
+generation speed: 약 3.39 tokens/second
+peak observed CPU: 약 445%
+peak observed container memory: 약 5.8GiB
+OOM: 없음
+```
+
+판정:
+
+- 1차 단순 시험에서 실패했던 사실성은 강화 규칙과 Schema로 통과함.
+- 짧은 항목 20초 목표는 크게 실패함.
+- Schema를 프롬프트 본문과 API `format`에 중복 전달해 prompt가 545 token으로 커진 점이 주요 최적화 대상.
+- 이 결과로 중간/긴 시험을 즉시 실행하지 않고 짧은 시험 최적화를 먼저 진행하기로 함.
+
+중지 시점의 로컬 미배포 변경:
+
+- `schema.json`: 문자열 길이와 배열 항목 수 제한 추가.
+- `run.py`: 프롬프트 본문의 Schema 중복 제거, `num_predict` 768에서 384로 축소.
+- `Modelfile`: 기본 `num_predict` 768에서 384로 축소.
+- 위 세 최적화 파일은 로컬에만 작성됐고 서버 파일 및 파생 모델에는 아직 반영하지 않음.
+
+중지 상태:
+
+```text
+Ollama container: healthy
+Host published ports: 없음
+ornith-pg-brief:9b: 디스크에 보존
+Loaded models: 0 (수동 unload 완료)
+Available memory: 약 14GiB
+Swap: 사실상 0
+Server result file: 보존
+```
+
+다음 재개 순서:
+
+1. 로컬 Python/JSON/diff 검증 재실행.
+2. 최적화된 `Modelfile`, `schema.json`, `run.py`만 정확한 상대 경로로 서버에 동기화.
+3. `ornith-pg-brief:9b`를 새 Modelfile로 재생성하고 `num_predict=384` 확인.
+4. 동일한 짧은 원문을 `short-v3.json`으로 1회 재시험.
+5. 사실성·JSON 통과와 처리시간 개선 폭을 `short-v2.json`과 비교.
+6. 속도가 수용 가능할 때만 중간/긴 항목 시험 진행. 여전히 과도하면 로컬 모델을 백그라운드/짧은 항목 제한으로 판정하고 Google fallback 설계로 이동.
+
+### 2026-08-13 / P03 / 짧은 v3 시험과 AI 작업 후순위 전환
+
+수행:
+
+- Schema의 문자열 길이와 배열 개수를 제한하고 프롬프트 본문의 중복 Schema를 제거.
+- 전용 모델과 실행기의 `num_predict`를 384로 축소.
+- 동일한 `pg18-uuidv7-short` 원문으로 v3 시험 1회 수행.
+
+비교 결과:
+
+```text
+항목                 v2          v3
+wall time            138.00초    97.43초
+model load            17.86초     9.29초
+prompt tokens        545         287
+prompt processing     46.85초    29.84초
+output tokens        248         212
+generation            73.26초    58.28초
+JSON/evidence         통과        통과
+```
+
+판정:
+
+- 약 29% 개선됐지만 짧은 항목 20초 기준은 여전히 크게 실패.
+- `uuidv4()`가 evidence에는 포함됐지만 요약과 추가 항목에서 빠져 완전성도 충분하지 않음.
+- 중간/긴 항목과 연속 20건 시험은 진행하지 않음.
+- 모델을 unload했고 Ollama 컨테이너는 `healthy`, 호스트 공개 포트 없음, 가용 메모리 약 14GiB 상태.
+- 사용자 지시에 따라 AI 요약과 OmniRoute를 마지막 단계로 이동.
+- 다음 작업은 P04 애플리케이션·DB 골격, P05 공식 문서 수집, P06 버전 비교 엔진 순서로 진행.
 
 ## 4. AI 라우팅 결정 기록
 

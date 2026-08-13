@@ -1,0 +1,20 @@
+[
+  {
+    "id": "pg18-uuidv7-short",
+    "size": "short",
+    "source_url": "https://www.postgresql.org/docs/18/release-18.html",
+    "source_text": "Add UUID version 7 generation function uuidv7(). This UUID value is temporally sortable. Function alias uuidv4() has been added to explicitly generate version 4 UUIDs."
+  },
+  {
+    "id": "pg17-removals-medium",
+    "size": "medium",
+    "source_url": "https://www.postgresql.org/docs/17/release-17.html",
+    "source_text": "Remove feature which simulated per-database users. The feature, db_user_namespace, was rarely used. Remove adminpack contrib extension. This was used by now end-of-life pgAdmin III. Remove wal_sync_method value fsync_writethrough on Windows. This value was the same as fsync on Windows."
+  },
+  {
+    "id": "pg18-aio-long",
+    "size": "long",
+    "source_url": "https://www.postgresql.org/docs/18/release-18.html",
+    "source_text": "Add an asynchronous I/O subsystem. This feature allows backends to queue multiple read requests, which allows for more efficient sequential scans, bitmap heap scans, vacuums, etc. This is enabled by server variable io_method, with server variables io_combine_limit and io_max_combine_limit added to control it. This also enables effective_io_concurrency and maintenance_io_concurrency values greater than zero for systems without fadvise() support. The new system view pg_aios shows the file handles being used for asynchronous I/O. Add per-backend I/O statistics reporting. The statistics are accessed via pg_stat_get_backend_io(). Per-backend I/O statistics can be cleared via pg_stat_reset_backend_stats(). Add pg_stat_io columns to report I/O activity in bytes. The new columns are read_bytes, write_bytes, and extend_bytes. The op_bytes column, which always equaled BLCKSZ, has been removed."
+  }
+]
