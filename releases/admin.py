@@ -1,6 +1,6 @@
 from django.contrib import admin
 
-from .models import JobRun, Release, SourceSnapshot
+from .models import ChangeItem, JobRun, Release, ReleaseSection, SourceSnapshot
 
 
 @admin.register(Release)
@@ -29,11 +29,59 @@ class SourceSnapshotAdmin(admin.ModelAdmin):
         "storage_path",
         "fetched_at",
         "is_current",
+        "parser_version",
+        "parsed_at",
+        "parse_error",
     )
 
     @admin.display(description="SHA-256")
     def content_sha256_short(self, obj):
         return obj.content_sha256[:12]
+
+    def has_add_permission(self, request):
+        return False
+
+    def has_change_permission(self, request, obj=None):
+        return False
+
+    def has_delete_permission(self, request, obj=None):
+        return False
+
+
+@admin.register(ReleaseSection)
+class ReleaseSectionAdmin(admin.ModelAdmin):
+    list_display = ("release_version", "position", "level", "title", "source_id")
+    list_filter = ("level",)
+    search_fields = ("snapshot__release__version", "title", "source_id", "body_text")
+    readonly_fields = ("snapshot", "parent", "source_id", "title", "level", "position", "body_text")
+
+    @admin.display(description="Release")
+    def release_version(self, obj):
+        return obj.snapshot.release.version
+
+    def has_add_permission(self, request):
+        return False
+
+    def has_change_permission(self, request, obj=None):
+        return False
+
+    def has_delete_permission(self, request, obj=None):
+        return False
+
+
+@admin.register(ChangeItem)
+class ChangeItemAdmin(admin.ModelAdmin):
+    list_display = ("release_version", "position", "section", "text_preview")
+    search_fields = ("snapshot__release__version", "section__title", "text", "item_sha256")
+    readonly_fields = ("snapshot", "section", "position", "item_sha256", "text", "raw_html")
+
+    @admin.display(description="Release")
+    def release_version(self, obj):
+        return obj.snapshot.release.version
+
+    @admin.display(description="Text")
+    def text_preview(self, obj):
+        return obj.text[:120]
 
     def has_add_permission(self, request):
         return False

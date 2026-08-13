@@ -35,6 +35,9 @@ class SourceSnapshot(models.Model):
     storage_path = models.CharField(max_length=500)
     fetched_at = models.DateTimeField(auto_now_add=True)
     is_current = models.BooleanField(default=True)
+    parser_version = models.CharField(max_length=32, blank=True)
+    parsed_at = models.DateTimeField(null=True, blank=True)
+    parse_error = models.TextField(blank=True)
 
     class Meta:
         ordering = ["-fetched_at"]
@@ -47,6 +50,43 @@ class SourceSnapshot(models.Model):
 
     def __str__(self):
         return f"{self.release.version} / {self.content_sha256[:12]}"
+
+
+class ReleaseSection(models.Model):
+    snapshot = models.ForeignKey(SourceSnapshot, on_delete=models.CASCADE, related_name="sections")
+    parent = models.ForeignKey("self", null=True, blank=True, on_delete=models.CASCADE, related_name="children")
+    source_id = models.CharField(max_length=200, blank=True)
+    title = models.CharField(max_length=500)
+    level = models.PositiveSmallIntegerField()
+    position = models.PositiveIntegerField()
+    body_text = models.TextField(blank=True)
+
+    class Meta:
+        ordering = ["position"]
+        constraints = [
+            models.UniqueConstraint(fields=["snapshot", "position"], name="unique_snapshot_section_position")
+        ]
+
+    def __str__(self):
+        return f"{self.snapshot.release.version} / {self.title}"
+
+
+class ChangeItem(models.Model):
+    snapshot = models.ForeignKey(SourceSnapshot, on_delete=models.CASCADE, related_name="change_items")
+    section = models.ForeignKey(ReleaseSection, on_delete=models.CASCADE, related_name="change_items")
+    position = models.PositiveIntegerField()
+    item_sha256 = models.CharField(max_length=64)
+    text = models.TextField()
+    raw_html = models.TextField()
+
+    class Meta:
+        ordering = ["position"]
+        constraints = [
+            models.UniqueConstraint(fields=["snapshot", "position"], name="unique_snapshot_change_position")
+        ]
+
+    def __str__(self):
+        return f"{self.snapshot.release.version} / item {self.position}"
 
 
 class JobRun(models.Model):
