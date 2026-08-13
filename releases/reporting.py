@@ -9,6 +9,13 @@ from releases.comparison import build_comparison_summary
 from releases.models import ChangeItem, Release, ReportProfile, Review, SourceSnapshot
 
 
+REPORT_LIMITATIONS = (
+    "이 보고서는 PostgreSQL 공식 릴리스 노트를 구조화한 자료이며 개별 시스템의 호환성 시험 결과가 아닙니다.",
+    "사용 중인 확장 모듈, 드라이버, 운영체제, 애플리케이션 SQL과 설정의 호환성은 별도로 검증해야 합니다.",
+    "운영 적용 전 백업·복구와 실제 데이터 기반 업그레이드 리허설을 수행해야 합니다.",
+)
+
+
 @dataclass(frozen=True)
 class ReportItem:
     version: str
@@ -73,6 +80,7 @@ def build_approved_report(from_version, to_version, level, profile_id=None):
         "level": level,
         "generated_at": timezone.localtime().strftime("%Y-%m-%d %H:%M:%S %Z"),
         "branding": build_branding(profile_id),
+        "limitations": REPORT_LIMITATIONS,
         "summary": summary,
         "items": items,
     }
@@ -100,6 +108,9 @@ def render_text(report):
         support_line("AS-IS", summary["from_support"]),
         support_line("TO-BE", summary["to_support"]),
         "",
+        "적용 전 확인사항",
+        *[f"{index}. {limitation}" for index, limitation in enumerate(report["limitations"], 1)],
+        "",
     ]
     for index, item in enumerate(report["items"], 1):
         lines.extend([f"{index}. PostgreSQL {item.version} · {item.area} · {item.change_type}", item.text, f"공식 원문: {item.source_url}", ""])
@@ -119,7 +130,9 @@ def render_markdown(report):
         f"- 포함 릴리스: {summary['release_count']}개",
         f"- 승인 항목: {len(report['items'])}개",
         f"- {support_line('AS-IS', summary['from_support'])}",
-        f"- {support_line('TO-BE', summary['to_support'])}", "", "## 승인된 변경사항", "",
+        f"- {support_line('TO-BE', summary['to_support'])}", "", "## 적용 전 확인사항", "",
+        *[f"- {limitation}" for limitation in report["limitations"]],
+        "", "## 승인된 변경사항", "",
     ]
     for item in report["items"]:
         lines.extend([f"### PostgreSQL {item.version} · {item.area}", "", f"**유형:** {item.change_type}", "", item.text, "", f"[PostgreSQL 공식 원문]({item.source_url})", ""])
@@ -140,6 +153,7 @@ def render_html(report):
             f"<br><strong>프로젝트명:</strong> {escape(branding['project_name'])}" if branding["project_name"] else "",
         )
     )
+    limitations_html = "".join(f"<li>{escape(limitation)}</li>" for limitation in report["limitations"])
     items_html = "".join(
         "<article>" f"<h2>PostgreSQL {escape(item.version)} · {escape(item.area)}</h2>" f"<p><strong>유형:</strong> {escape(item.change_type)}</p>" f"<p>{escape(item.text).replace(chr(10), '<br>')}</p>" f'<p><a href="{escape(item.source_url, quote=True)}">PostgreSQL 공식 원문</a></p>' "</article>"
         for item in report["items"]
@@ -150,5 +164,6 @@ def render_html(report):
         "h1,h2{font-family:Georgia,serif}article{border-top:1px solid #dbe4df;padding:18px 0}a{color:#176b4d}</style></head><body>"
         f"{logo_html}<h1>{escape(report['title'])}</h1><p><strong>업그레이드 범위:</strong> {escape(summary['from_version'])} (제외) → {escape(summary['to_version'])} (포함){branding_html}<br>"
         f"<strong>포함 릴리스:</strong> {summary['release_count']}개 · <strong>승인 항목:</strong> {len(report['items'])}개<br>"
-        f"{escape(support_line('AS-IS', summary['from_support']))}<br>{escape(support_line('TO-BE', summary['to_support']))}</p>{items_html}</body></html>"
+        f"{escape(support_line('AS-IS', summary['from_support']))}<br>{escape(support_line('TO-BE', summary['to_support']))}</p>"
+        f"<h2>적용 전 확인사항</h2><ul>{limitations_html}</ul>{items_html}</body></html>"
     )

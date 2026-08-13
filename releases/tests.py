@@ -1,4 +1,5 @@
-from io import BytesIO
+from io import BytesIO, StringIO
+import hashlib
 from pathlib import Path
 from tempfile import TemporaryDirectory
 from unittest.mock import patch
@@ -264,6 +265,7 @@ class ComparisonViewTests(TestCase):
                 raw_html="<div id='docContent'></div>",
                 extracted_text="release text",
                 storage_path=f"{version}.html",
+                parser_version="2",
             )
             section = ReleaseSection.objects.create(
                 snapshot=snapshot,
@@ -272,13 +274,14 @@ class ComparisonViewTests(TestCase):
                 level=2,
                 position=1,
             )
+            item_raw_html = f"<li>Fix item for {version}</li>"
             item = ChangeItem.objects.create(
                 snapshot=snapshot,
                 section=section,
                 position=1,
-                item_sha256=("f" + version.replace(".", "") * 64)[:64],
+                item_sha256=hashlib.sha256(item_raw_html.encode("utf-8")).hexdigest(),
                 text=f"Fix item for {version}",
-                raw_html=f"<li>Fix item for {version}</li>",
+                raw_html=item_raw_html,
                 change_type="fixed",
                 classification_version="rules-2",
             )
@@ -298,6 +301,11 @@ class ComparisonViewTests(TestCase):
         response = self.client.get("/")
         self.assertEqual(response.status_code, 302)
         self.assertTrue(response.url.startswith("/admin/login/"))
+
+    def test_pilot_range_validation_command(self):
+        output = StringIO()
+        call_command("validate_pilot_ranges", "--range", "17.10:18.4", stdout=output)
+        self.assertIn('"status": "success"', output.getvalue())
 
     def test_comparison_renders_summary_filter_and_official_source(self):
         self.client.force_login(self.user)
@@ -381,6 +389,7 @@ class ComparisonViewTests(TestCase):
                 self.assertContains(response, "메일에 넣을 승인 문구")
                 self.assertNotContains(response, "Fix item for 18.0")
                 self.assertContains(response, "https://www.postgresql.org/docs/release/18.4/")
+                self.assertContains(response, "업그레이드 리허설")
 
     def test_empty_approved_report_is_rejected(self):
         self.client.force_login(self.user)

@@ -16,7 +16,7 @@ from reportlab.lib.units import inch
 from reportlab.pdfbase import pdfmetrics
 from reportlab.pdfbase.ttfonts import TTFont
 from reportlab.lib.utils import ImageReader
-from reportlab.platypus import Image as ReportLabImage, Paragraph, SimpleDocTemplate, Spacer
+from reportlab.platypus import Image as ReportLabImage, ListFlowable, ListItem, Paragraph, SimpleDocTemplate, Spacer
 
 from releases.reporting import support_line
 
@@ -73,7 +73,7 @@ def configure_docx_styles(document):
     section.page_height = Inches(11)
     section.top_margin = Inches(1)
     section.right_margin = Inches(1)
-    section.bottom_margin = Inches(1)
+    section.bottom_margin = Inches(1.3)
     section.left_margin = Inches(1)
     section.header_distance = Inches(0.492)
     section.footer_distance = Inches(0.492)
@@ -164,6 +164,11 @@ def render_docx_bytes(report):
         set_run_font(paragraph.add_run(f"{label}: "), bold=True)
         set_run_font(paragraph.add_run(value))
 
+    document.add_heading("적용 전 확인사항", level=1)
+    for limitation in report["limitations"]:
+        paragraph = document.add_paragraph(style="List Bullet")
+        set_run_font(paragraph.add_run(limitation))
+
     document.add_heading("승인된 변경사항", level=1)
     grouped = defaultdict(list)
     for item in report["items"]:
@@ -178,8 +183,11 @@ def render_docx_bytes(report):
             set_run_font(heading.add_run(f"{item.area} · {item.change_type}"), size=11, bold=True, color=DARK_BLUE)
             body = document.add_paragraph(item.text)
             body.paragraph_format.keep_together = True
+            body.paragraph_format.keep_with_next = True
             source = document.add_paragraph()
-            source.paragraph_format.space_after = Pt(8)
+            source.paragraph_format.keep_together = True
+            source.paragraph_format.space_before = Pt(2)
+            source.paragraph_format.space_after = Pt(10)
             add_hyperlink(source, "PostgreSQL 공식 원문", item.source_url)
 
     output = BytesIO()
@@ -257,6 +265,16 @@ def render_pdf_bytes(report):
     ])
     for key, value in summary_fields:
         story.append(Paragraph(f"<b>{escape(key)}:</b> {escape(value)}", body))
+    story.append(Paragraph("적용 전 확인사항", h1))
+    story.append(
+        ListFlowable(
+            [ListItem(Paragraph(escape(limitation), body)) for limitation in report["limitations"]],
+            bulletType="bullet",
+            leftIndent=18,
+            bulletFontName=font_name,
+            bulletFontSize=7,
+        )
+    )
     story.append(Paragraph("승인된 변경사항", h1))
 
     grouped = defaultdict(list)
