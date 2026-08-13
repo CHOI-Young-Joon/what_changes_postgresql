@@ -1,0 +1,11 @@
+[Unit]
+Description=Daily official PostgreSQL release document collection
+
+[Timer]
+OnCalendar=*-*-* 04:00:00 Asia/Seoul
+RandomizedDelaySec=30m
+Persistent=true
+Unit=what-changes-postgresql-sync.service
+
+[Install]
+WantedBy=timers.target

@@ -16,14 +16,126 @@
 | P01 | VM 안정화 | 완료 | NTP·서울 시간대·OS 업데이트·재부팅·SSH 검증 완료, UFW 수신 기본 차단 및 OpenSSH만 허용, `/opt/what_changes_postgresql` 확정 | SSH 비밀번호 인증은 활성 상태이나 현재 P01 완료 조건 범위 밖 | P02 진행, SSH 추가 강화는 별도 작업으로 관리 |
 | P02 | 컨테이너 실행 기반 | 완료 | Docker Engine·Compose 설치, 전역 로그 제한·live-restore 적용, 내부 네트워크·볼륨·healthcheck·자원 제한·재부팅 자동 복구 실증 | 운영 서비스가 아직 없어 실제 운영 네트워크·볼륨은 P04에서 생성됨 | P04 애플리케이션·DB 골격 진행 |
 | P03 | 로컬 Ollama 벤치마크 | 대기 | 공식 `0.32.9` 비root Docker 서비스와 전용 모델 구성, 강화 짧은 v2/v3 시험 완료 | v3도 97.43초로 속도 기준 실패, AI 우선순위를 마지막으로 변경 | P04~P10 비AI 기반 완료 후 재개 |
-| P04 | 애플리케이션 골격 | 진행 | 착수 준비 | 없음 | Django·PostgreSQL·worker·scheduler 골격 구성 |
-| P05 | 공식 문서 수집기 | 대기 | 미착수 | 없음 | P04 이후 진행 |
+| P04 | 애플리케이션 골격 | 진행 | Django·PostgreSQL 최소 골격 작성 중 | Redis·Celery 없이 단일 VM에 맞게 단순화 | VM에서 빌드·마이그레이션·상태 점검 검증 |
+| P05 | 공식 문서 수집기 | 진행 | PostgreSQL 9 이상 공식 원문 346건 백필 및 무결성 검증 완료 | 변경 항목 계층 파싱과 timer 설치 남음 | 계층 파서 구현 후 systemd timer 활성화 |
 | P06 | 버전 비교 엔진 | 대기 | 미착수 | 없음 | P05 이후 진행 |
 | P07 | AI 및 OmniRoute | 대기 | 라우팅 순서만 확정 | 비AI 데이터 기반보다 후순위 | P04~P10 완료 후 진행 |
 | P08 | 검수 및 고객 화면 | 대기 | 미착수 | 없음 | P06 이후 원문 중심 화면부터 진행 |
 | P09 | 출력 문서 | 대기 | 미착수 | 도메인/HTTPS 미정 | P08 이후 진행 |
 | P10 | 운영과 복구 | 대기 | 미착수 | 외부 백업 위치 미정 | 배포 전 확정 |
 | P11 | 시범 검증과 출시 | 대기 | 미착수 | 없음 | P00~P10 이후 진행 |
+
+### 2026-08-13 / P04 / Django·PostgreSQL 최소 실행 골격
+
+사전 고지:
+
+- AI 작업을 중단하고 공식 PostgreSQL 자료 수집 기반을 먼저 구성한다고 알림.
+- Docker Compose 실행과 검증은 Mac이 아닌 VM에서만 수행한다고 알림.
+- Redis·Valkey·Celery를 사용하지 않고 단일 VM에 맞게 Django 관리 명령과 systemd timer를 사용하기로 확정.
+
+구성:
+
+- Django `5.2.15` LTS, Gunicorn `26.0.0`, psycopg `3.3.4`.
+- PostgreSQL `18.4` 컨테이너와 영구 명명 볼륨.
+- Django 기본 인증·관리자 기능, DB 연동 상태 점검 URL, 읽기 전용 감사 로그 관리 화면.
+- Ollama는 `ai` Compose profile로 분리하고 실행 중이던 컨테이너는 중지. 모델과 설정은 보존.
+
+VM 검증 결과:
+
+```text
+Django system check: issues 0
+Django test: 1 passed
+PostgreSQL: 18.4
+DB/web container: healthy
+health response: HTTP 200, database up
+호스트 공개 포트: 없음
+DB 중지 시 health response: HTTP 503, database down
+DB 재기동 후 감사 로그 시험 레코드: 1건 보존
+```
+
+계획 대비 판정:
+
+- 완료: Django·PostgreSQL 실행, 마이그레이션, DB 장애 감지, 재기동 후 데이터 유지.
+- 남음: 실제 수집 데이터 모델에 맞춘 관리자 역할 분리와 로그인 실증.
+- P04는 `진행` 상태를 유지하고 P05 데이터 모델과 함께 남은 권한 항목을 마무리함.
+
+### 2026-08-13 / P05 / 공식 릴리스 원문 수집 1차 검증
+
+사전 고지:
+
+- PostgreSQL 공식 도메인의 릴리스 인덱스와 개별 문서만 수집한다고 알림.
+- 먼저 18.4 한 건으로 저장과 중복 방지를 확인한 뒤 9.2.10과 18.0으로 버전 규칙을 확인한다고 알림.
+
+구성:
+
+- `release`, `source_snapshot`, `job_run` 데이터 모델과 관리자 조회 화면.
+- 공식 HTTPS 도메인 강제, 원문 HTML·추출 텍스트·SHA-256·HTTP 메타데이터·수집시각 저장.
+- 원문 HTML을 PostgreSQL DB와 `source_snapshots` 명명 볼륨에 함께 보관.
+- 동일 릴리스와 동일 SHA-256 조합에 DB 유일성 제약 적용.
+- Django 관리 명령 `sync_releases` 구현.
+
+VM 검증 결과:
+
+```text
+18.4 1차: created=1, unchanged=0, failed=0
+18.4 2차: created=0, unchanged=1, failed=0
+18.4 원문 파일: 48,455 bytes, SHA-256 일치
+9.2.10: minor, release date 2015-02-05
+18.0: major, release date 2025-09-25
+호스트 공개 포트: 없음
+```
+
+발견 및 조치:
+
+- 내부 전용 backend 네트워크만으로는 공식 사이트 DNS 조회가 불가능했음.
+- DB는 backend에만 유지하고 Django에만 비공개 outbound 네트워크를 추가해 해결.
+- 수집 명령의 `--version`이 Django 기본 옵션과 충돌하여 `--release`로 변경.
+- 두 문제 모두 실제 수집 전후 검증에서 발견했으며 잘못된 원문 데이터는 생성되지 않음.
+
+계획 대비 판정:
+
+- 완료: 공식 릴리스 인덱스 접근, 원문/해시/URL/수집시각 보관, 재수집 중복 방지, 구버전과 최신 버전 수집.
+- 남음: 전체 인덱스 수집, 계층형 변경 항목 파싱, 실패 격리 실증, systemd timer 등록.
+
+### 2026-08-13 / P05 / PostgreSQL 9 이상 최초 백필
+
+사전 고지:
+
+- 공식 인덱스 560건을 매일 전부 요청하지 않고 일일 수집과 최초 백필 범위를 분리한다고 알림.
+- 최초 백필은 요구 사례를 포함하는 PostgreSQL 9 이상으로 제한하고 요청 간 0.75초 간격을 적용한다고 알림.
+
+수행:
+
+- PostgreSQL 9 이상 공식 릴리스 346건 순차 수집.
+- 네트워크 오류와 5xx 응답에 최대 3회 지수형 재시도 추가.
+- 일일 수집은 최신 5개 메이저의 최신 릴리스만 자동 선택하도록 구성.
+- 중복 실행 방지와 매일 04:00 KST 실행을 위한 systemd unit/timer 파일 작성 및 문법 검증.
+- DB 메타데이터와 볼륨의 원문 파일을 전수 대조하는 `verify_snapshots` 관리 명령 추가.
+
+최종 결과:
+
+```text
+공식 인덱스 전체: 560건
+PostgreSQL 9 이상 백필 대상: 346건
+백필 결과: created=336, unchanged=10, failed=0
+DB release: 346건
+DB current snapshot: 346건
+원문 파일: 346건, 총 10,916,349 bytes
+누락 파일: 0
+SHA-256 불일치: 0
+현재본 중복: 0
+릴리스 날짜 누락: 0
+일일 선택: 18.4, 17.10, 16.14, 15.18, 14.23
+Django test: 6 passed
+web/db: healthy
+호스트 공개 포트: 없음
+```
+
+남은 일:
+
+- 릴리스 노트의 섹션과 변경 항목을 계층형 데이터로 파싱.
+- 파싱 실패 격리 시험.
+- root 권한으로 검증된 systemd unit/timer를 설치하고 실제 예약 실행 상태 확인.
 
 ## 3. 상세 작업 기록
 

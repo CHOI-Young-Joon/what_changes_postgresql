@@ -66,7 +66,7 @@ PostgreSQL 공식 문서
         ↓
 수집기 → 원문 스냅샷 → 구조화 변경 항목
                               ↓
-                       AI 요약 작업 큐
+                       AI 요약 단계(후순위)
                               ↓
                   OmniRoute 우선순위 라우팅
                               ↓
@@ -80,8 +80,7 @@ VM 내부 서비스는 다음과 같이 분리한다.
 ```text
 proxy       HTTPS와 접근 제어
 web         Django 웹과 API
-worker      수집, AI, 문서 생성
-scheduler   신규 릴리스 확인
+systemd     Django 관리 명령을 이용한 정기 수집
 db          애플리케이션 PostgreSQL
 omniroute   AI 공급자 라우팅
 ollama      로컬 ornith:9b 후보
@@ -239,7 +238,8 @@ P00~P02 기반 환경
 
 작업:
 
-- Django, PostgreSQL, worker, scheduler 구성
+- Django와 PostgreSQL 구성
+- 수집용 Django 관리 명령과 systemd timer 구성
 - 관리자 인증과 권한
 - DB 마이그레이션
 - 상태 점검 URL

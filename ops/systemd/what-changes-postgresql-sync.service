@@ -1,0 +1,19 @@
+[Unit]
+Description=Collect official PostgreSQL release documents
+Requires=docker.service
+After=docker.service network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+User=rock
+Group=rock
+WorkingDirectory=/opt/what_changes_postgresql
+RuntimeDirectory=what-changes-postgresql
+RuntimeDirectoryMode=0750
+ExecStartPre=/usr/bin/docker compose up -d db web
+ExecStart=/usr/bin/flock -n /run/what-changes-postgresql/sync.lock /usr/bin/docker compose exec -T web python manage.py sync_releases --latest-majors 5
+TimeoutStartSec=2h
+Nice=10
+IOSchedulingClass=idle
+UMask=0027
