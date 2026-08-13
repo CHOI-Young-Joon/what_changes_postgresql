@@ -132,6 +132,43 @@ class VersionSupport(models.Model):
         return f"PostgreSQL {self.series} ({'supported' if self.supported else 'unsupported'})"
 
 
+class Review(models.Model):
+    class Status(models.TextChoices):
+        PENDING = "pending", "검토 대기"
+        APPROVED = "approved", "승인"
+        REJECTED = "rejected", "반려"
+
+    change_item = models.OneToOneField(ChangeItem, on_delete=models.CASCADE, related_name="review")
+    status = models.CharField(max_length=16, choices=Status.choices, default=Status.PENDING)
+    edited_text = models.TextField(blank=True)
+    note = models.TextField(blank=True)
+    reviewer = models.ForeignKey(
+        "auth.User",
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name="release_reviews",
+    )
+    reviewed_at = models.DateTimeField(null=True, blank=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    def __str__(self):
+        return f"{self.change_item} / {self.status}"
+
+
+class ReviewEvent(models.Model):
+    review = models.ForeignKey(Review, on_delete=models.CASCADE, related_name="events")
+    actor = models.ForeignKey("auth.User", null=True, on_delete=models.SET_NULL, related_name="review_events")
+    previous_status = models.CharField(max_length=16, choices=Review.Status.choices)
+    new_status = models.CharField(max_length=16, choices=Review.Status.choices)
+    edited_text = models.TextField(blank=True)
+    note = models.TextField(blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ["-created_at"]
+
+
 class JobRun(models.Model):
     class Status(models.TextChoices):
         RUNNING = "running", "Running"

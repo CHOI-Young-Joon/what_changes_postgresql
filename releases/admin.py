@@ -8,6 +8,8 @@ from .models import (
     SourceSnapshot,
     VersionSupport,
     VersionSupportSnapshot,
+    Review,
+    ReviewEvent,
 )
 
 
@@ -138,6 +140,39 @@ class VersionSupportSnapshotAdmin(admin.ModelAdmin):
     @admin.display(description="SHA-256")
     def content_sha256_short(self, obj):
         return obj.content_sha256[:12]
+
+    def has_add_permission(self, request):
+        return False
+
+    def has_change_permission(self, request, obj=None):
+        return False
+
+    def has_delete_permission(self, request, obj=None):
+        return False
+
+
+@admin.register(Review)
+class ReviewAdmin(admin.ModelAdmin):
+    list_display = ("change_item", "status", "reviewer", "reviewed_at")
+    list_filter = ("status",)
+    search_fields = ("change_item__text", "edited_text", "note", "reviewer__username")
+    readonly_fields = ("change_item", "status", "edited_text", "note", "reviewer", "reviewed_at", "updated_at")
+
+    def has_add_permission(self, request):
+        return False
+
+    def has_change_permission(self, request, obj=None):
+        return False
+
+    def has_delete_permission(self, request, obj=None):
+        return False
+
+
+@admin.register(ReviewEvent)
+class ReviewEventAdmin(admin.ModelAdmin):
+    list_display = ("created_at", "review", "previous_status", "new_status", "actor")
+    list_filter = ("previous_status", "new_status")
+    readonly_fields = ("review", "actor", "previous_status", "new_status", "edited_text", "note", "created_at")
 
     def has_add_permission(self, request):
         return False

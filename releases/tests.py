@@ -4,7 +4,11 @@ from unittest.mock import patch
 from urllib.error import URLError
 
 from django.core.management import call_command
+from django.contrib.auth import get_user_model
 from django.test import SimpleTestCase, TestCase
+from django.urls import reverse
+
+from core.models import AuditLog
 
 from .collector import (
     classify_release,
@@ -19,7 +23,17 @@ from .collector import FetchedDocument, RELEASE_INDEX_URL
 from .comparison import PostgreSQLVersion, versions_in_upgrade_range
 from .classifier import classify_change
 from .support import parse_version_support
-from .models import JobRun, Release, SourceSnapshot
+from .models import (
+    ChangeItem,
+    JobRun,
+    Release,
+    ReleaseSection,
+    Review,
+    ReviewEvent,
+    SourceSnapshot,
+    VersionSupport,
+    VersionSupportSnapshot,
+)
 
 
 class CollectorParsingTests(SimpleTestCase):
@@ -205,3 +219,131 @@ class ReleaseSyncCommandTests(TestCase):
         self.assertEqual(job.failed_count, 1)
         self.assertTrue(SourceSnapshot.objects.filter(release__version="18.4").exists())
         self.assertFalse(SourceSnapshot.objects.filter(release__version="17.10").exists())
+
+
+class ComparisonViewTests(TestCase):
+    def setUp(self):
+        user_model = get_user_model()
+        self.user = user_model.objects.create_user(username="reviewer", password="test-password")
+        self.staff_user = user_model.objects.create_user(
+            username="staff-reviewer",
+            password="test-password",
+            is_staff=True,
+        )
+        support_snapshot = VersionSupportSnapshot.objects.create(
+            source_url="https://www.postgresql.org/support/versioning/",
+            content_sha256="a" * 64,
+            raw_html="<table></table>",
+            storage_path="support.html",
+        )
+        for version, kind, supported in (("17.10", "minor", True), ("18.0", "major", True), ("18.4", "minor", True)):
+            release = Release.objects.create(
+                version=version,
+                kind=kind,
+                release_date="2026-05-14",
+                source_url=f"https://www.postgresql.org/docs/release/{version}/",
+            )
+            snapshot = SourceSnapshot.objects.create(
+                release=release,
+                source_url=release.source_url,
+                content_sha256=(version.replace(".", "") * 64)[:64],
+                raw_html="<div id='docContent'></div>",
+                extracted_text="release text",
+                storage_path=f"{version}.html",
+            )
+            section = ReleaseSection.objects.create(
+                snapshot=snapshot,
+                source_id=f"RELEASE-{version.replace('.', '-')}-CHANGES",
+                title="Server",
+                level=2,
+                position=1,
+            )
+            item = ChangeItem.objects.create(
+                snapshot=snapshot,
+                section=section,
+                position=1,
+                item_sha256=("f" + version.replace(".", "") * 64)[:64],
+                text=f"Fix item for {version}",
+                raw_html=f"<li>Fix item for {version}</li>",
+                change_type="fixed",
+                classification_version="rules-2",
+            )
+            if version == "18.4":
+                self.target_item = item
+        for series in ("17", "18"):
+            VersionSupport.objects.create(
+                series=series,
+                current_minor=f"{series}.10" if series == "17" else "18.4",
+                supported=supported,
+                first_release_date="2024-01-01",
+                final_release_date="2030-01-01",
+                snapshot=support_snapshot,
+            )
+
+    def test_login_is_required(self):
+        response = self.client.get("/")
+        self.assertEqual(response.status_code, 302)
+        self.assertTrue(response.url.startswith("/admin/login/"))
+
+    def test_comparison_renders_summary_filter_and_official_source(self):
+        self.client.force_login(self.user)
+        response = self.client.get(
+            "/",
+            {"from_version": "17.10", "to_version": "18.4", "change_type": "fixed", "area": "Server"},
+        )
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "포함 릴리스")
+        self.assertContains(response, "18.0")
+        self.assertContains(response, "18.4")
+        self.assertNotContains(response, "Fix item for 17.10")
+        self.assertContains(response, "PostgreSQL 공식 원문")
+
+    def test_invalid_reverse_range_shows_error(self):
+        self.client.force_login(self.user)
+        response = self.client.get("/", {"from_version": "18.4", "to_version": "17.10"})
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "TO-BE version must be newer than AS-IS version")
+
+    def test_regular_user_cannot_submit_review(self):
+        self.client.force_login(self.user)
+        response = self.client.post(
+            reverse("releases:review-item", args=[self.target_item.pk]),
+            {"action": "approved"},
+        )
+        self.assertEqual(response.status_code, 403)
+        self.assertFalse(Review.objects.filter(change_item=self.target_item).exists())
+
+    def test_staff_review_creates_history_and_audit_log(self):
+        self.client.force_login(self.staff_user)
+        response = self.client.post(
+            reverse("releases:review-item", args=[self.target_item.pk]),
+            {
+                "action": "approved",
+                "edited_text": "고객 승인 문구",
+                "note": "공식 원문 확인 완료",
+                "next": "/?from_version=17.10&to_version=18.4",
+            },
+        )
+        self.assertRedirects(response, "/?from_version=17.10&to_version=18.4", fetch_redirect_response=False)
+        review = Review.objects.get(change_item=self.target_item)
+        self.assertEqual(review.status, Review.Status.APPROVED)
+        self.assertEqual(review.edited_text, "고객 승인 문구")
+        self.assertEqual(ReviewEvent.objects.filter(review=review).count(), 1)
+        self.assertTrue(AuditLog.objects.filter(action="review.approved", target_id=str(self.target_item.pk)).exists())
+
+    def test_customer_mode_contains_only_approved_items_and_edited_text(self):
+        Review.objects.create(
+            change_item=self.target_item,
+            status=Review.Status.APPROVED,
+            edited_text="고객에게 표시할 승인 문구",
+            reviewer=self.staff_user,
+        )
+        self.client.force_login(self.user)
+        response = self.client.get(
+            "/",
+            {"from_version": "17.10", "to_version": "18.4", "view_mode": "customer"},
+        )
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.context["page_obj"].paginator.count, 1)
+        self.assertContains(response, "고객에게 표시할 승인 문구")
+        self.assertNotContains(response, "Fix item for 18.0")
